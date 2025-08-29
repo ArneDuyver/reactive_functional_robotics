@@ -1,0 +1,14 @@
+# Cabal build artifacts
+dist/
+dist-*/
+dist-newstyle/
+
+# Cabal project local files
+cabal.project.local
+cabal.project.local~
+
+# Editor/OS files
+.vscode/
+.idea/
+.history/
+.vs/
