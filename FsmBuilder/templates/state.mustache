@@ -1,0 +1,35 @@
+{-# LANGUAGE Arrows #-}
+
+module {{moduleName}}State where
+
+import Control.Concurrent
+import FRP.Yampa
+import Helpers.Turtlebot
+import Helpers.KeyboardController
+import Helpers.YampaHelper
+
+{{stateNameLower}}SF :: SF String (Double, Double, Bool, String)
+{{stateNameLower}}SF = proc inputStr -> do
+  -- Decode turtlebot for string
+  let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState inputStr
+  let (keyboardcontroller, keyboardcontrollerErrFlag, keyboardcontrollerDebugMsg) = decodeKeyboardControllerState inputStr
+
+  -- #### Control logic ####
+
+  -- #### END: Control logic ####
+
+  -- Create the error string
+  let (errFlag, debugMsg) = createErrFlagAndDebugMsg [("turtlebot", turtlebotErrFlag, turtlebotDebugMsg),("keyboardController", keyboardcontrollerErrFlag, keyboardcontrollerDebugMsg)]
+  -- Add your own values for debugging
+  let specialDebugString = if errFlag then "DEBUG:: " ++ debugMsg else "STATE: {{stateName}} :: "
+  -- To stop simulation
+  let debugString
+        | quit keyboardcontroller || errFlag = "STOPSIM " ++ specialDebugString
+        | otherwise = specialDebugString
+
+  returnA -< (leftWheelVelocityInRadSec,rightWheelVelocityInRadSec,errFlag,debugString)
+
+analyzer{{stateName}}State :: SF (String, (Double, Double, Bool, String)) (Event (String))
+analyzer{{stateName}}State = proc (sfInput, sfOutput) -> do
+  e <- edgeTag "newStateName" -< True 
+  returnA -< ""

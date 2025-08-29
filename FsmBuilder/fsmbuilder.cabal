@@ -1,0 +1,48 @@
+cabal-version:      3.0
+name:               fsmbuilder
+version:            0.1.0.0
+license:            Apache-2.0
+license-file:       LICENSE
+author:             ArneDuyver
+maintainer:         arne_duyver@hotmail.com
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+
+common warnings
+    ghc-options: -Wall
+
+library
+    import:           warnings
+    exposed-modules:  FsmBuilder
+    build-depends:    base >=4.17.2.1 && <4.20
+                    , aeson
+                    , mustache
+                    , xml-conduit
+                    , xml
+                    , containers
+                    , directory
+                    , text
+                    , unordered-containers
+                    , yaml
+                    , vector
+    hs-source-dirs:   src
+    default-extensions: OverloadedStrings
+    default-language: Haskell2010
+
+executable fsmbuilder
+    build-depends:    base >=4.17.2.1 && <4.20
+                    , aeson
+                    , mustache
+                    , fsmbuilder
+                    , xml-conduit
+                    , xml
+                    , containers
+                    , directory
+                    , text
+                    , unordered-containers
+                    , yaml
+                    , vector 
+    hs-source-dirs:   src
+    default-language: Haskell2010
+    main-is:          Main.hs
+

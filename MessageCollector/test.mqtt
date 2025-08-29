@@ -1,0 +1,39 @@
+## TODO: DELETE ME
+## Variables
+host=localhost
+topic2=fsm/input/sim
+topic1=fsm/input/controller
+message=Hello, world!
+
+## Establish connection
+
+# %%
+url: mqtt://{{host}}:1883
+
+# $$
+{{topic1}}
+{{topic2}}
+fsm/toenv
+
+## Publish to topics
+
+# ## Publish '{ "message": "{{message}}" }' a more advanced message
+topic: {{topic1}}
+
+{
+    "controller": {
+        "test": 4
+    }
+}
+
+# ## Publish
+topic: {{topic2}}
+
+{
+    "sim": "sim"
+}
+
+# ## Publish
+topic: {{topic2}}
+
+QUIT
