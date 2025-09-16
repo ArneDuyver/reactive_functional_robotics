@@ -13,10 +13,15 @@ import Data.Char
 import Data.Maybe (fromMaybe)
 import Data.Text (pack)
 
--- TODO automate also with multiple layers
+data SimpleOne = SimpleOne
+  { actuatorOne :: Integer
+  } deriving (Show, Eq, Generic)
+
+instance ToJSON SimpleOne
+
 data OutputData = OutputData
   { 
-    out :: Int,
+    simpleOne :: SimpleOne,
     state :: String
   }
   deriving (Show, Generic)

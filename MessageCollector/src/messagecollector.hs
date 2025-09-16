@@ -14,13 +14,15 @@ import Control.Concurrent.STM.TBQueue (tryReadTBQueue)
 import Data.ByteString.Lazy.Char8 qualified as B (ByteString, pack, unpack)
 import Data.Aeson (decode, encode, Object, Value)
 import qualified Data.Aeson.KeyMap as KM
+import qualified Data.Aeson.Key as K
 import qualified Data.HashMap.Strict as HM
 import Network.MQTT.Client (MQTTClient, MessageCallback (SimpleCallback),normalDisconnect, connectURI, waitForClient, mqttConfig, publish, subscribe, _msgCB)
 import Network.MQTT.Topic (Topic, mkFilter, mkTopic)
 import Network.MQTT.Types (RetainHandling (DoNotSendOnSubscribe), Property, QoS, SubErr, subOptions)
 import Network.URI (parseURI)
 import Control.Monad (when)
-import Data.Text (pack)
+import Data.Text (pack, unpack)
+import Data.Yaml (decodeFileEither, ParseException, FromJSON)
 
 subToTopic :: [Char] -> [Char] -> TBQueue String -> IO (([Either Network.MQTT.Types.SubErr QoS], [Property]), MQTTClient)
 subToTopic brokerUri topic eventChan = do
@@ -69,6 +71,29 @@ data MqttConfig = MqttConfig
     input_topics :: [String]
   }
   deriving (Show, Generic)
+
+data ConfigController = ConfigController
+  { name :: String
+  }
+  deriving (Show, Generic)
+
+data Configuration = Configuration
+  { controllers :: [KM.KeyMap ConfigController]
+  }
+  deriving (Show, Generic)
+
+instance FromJSON ConfigController
+instance FromJSON Configuration
+
+parseConfigurationFile :: String -> IO (Either String [String])
+parseConfigurationFile filepath = do
+  result <- decodeFileEither filepath
+  case result of
+    Left err -> return $ Left $ "Failed to parse YAML: " ++ show err
+    Right config -> do
+      let controllerNames = concatMap (map name . KM.elems) (controllers config)
+          inputTopics = map ("fsm/input/" ++) controllerNames
+      return $ Right inputTopics
   
 createMqttConfigFromFile :: String -> IO MqttConfig
 createMqttConfigFromFile filepath = do
@@ -76,11 +101,14 @@ createMqttConfigFromFile filepath = do
   portVal <- getEnvVarValue "MQTT_BROKER_PORT"
   from_env_topicVal <- getEnvVarValue "FROM_ENV_COLLECTION_TOPIC"
   to_env_topicVal <- getEnvVarValue "TO_ENV_COLLECTION_TOPIC"
+  configResult <- parseConfigurationFile "config/configuration.yml"
   let broker = fromMaybe "NOT FOUND" brokerVal
       port = maybe (-9999) readInt portVal
       from_env_topic = fromMaybe "NOT FOUND" from_env_topicVal
       to_env_topic = fromMaybe "NOT FOUND" to_env_topicVal
-      input_topics = ["fsm/input/sim","fsm/input/controller"]
+      input_topics = case configResult of
+        Right topics -> topics
+        Left err -> error $ "Failed to parse configuration: " ++ err
   return MqttConfig {
     host = broker,
     port = port,
@@ -122,7 +150,8 @@ mqttCollector = do
   mqttConfigVals <- createMqttConfigFromFile ".env"
   let brokerUriStr = host mqttConfigVals ++ ":" ++ show (port mqttConfigVals)
       maybeUri = parseURI brokerUriStr
-      inputTopics = ["fsm/input/sim", "fsm/input/controller"] -- TODO: create inputtopics from config file
+      inputTopics = input_topics mqttConfigVals
+  print inputTopics --TODO delete
   case maybeUri of
     Just uri -> do
       stopSignal <- newEmptyMVar

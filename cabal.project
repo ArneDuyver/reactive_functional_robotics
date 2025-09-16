@@ -1,4 +1,4 @@
-packages:  MessageCollector, FsmBuilder, FsmFrontend, FsmRunner
+packages:  MessageCollector, FsmBuilder, FsmFrontend, FsmRunner, RfrLibrary
 
 with-compiler: ghc-9.6.7
 

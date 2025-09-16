@@ -1,0 +1,14 @@
+{-# LANGUAGE Arrows #-}
+
+module Controllogic where
+
+import Control.Concurrent
+import FRP.Yampa
+import Helpers.YampaHelper
+{{{import_controllers}}}
+
+{{{mappingEntries}}}
+
+-- MAIN
+mainSF :: SF String OutputState
+mainSF = kSwitch {{startStateLower}}StateSF analyzer{{startState}}State mapping

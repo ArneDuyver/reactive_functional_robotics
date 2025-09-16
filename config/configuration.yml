@@ -1,0 +1,24 @@
+
+controllers:
+  - simpleTestOne:
+      name: simpleOne
+      critical: true
+      inputs:
+        - sensorOne:
+            name: sensorOne
+            type: Integer
+            default: -9999
+      outputs:
+        - actuatorOne:
+            name: actuatorOne
+            type: Integer
+        
+  - simpleTestTwo:
+      name: simpleTwo
+      critical: false
+      inputs:
+        - test:
+            name: testInput
+            type: String
+            default: "Default String"
+

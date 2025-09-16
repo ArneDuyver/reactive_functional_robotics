@@ -1,0 +1,25 @@
+cabal-version:      3.0
+name:               rfrlibrary
+version:            0.1.0.0
+license:            Apache-2.0
+author:             ArneDuyver
+maintainer:         arne_duyver@hotmail.com
+build-type:         Simple
+
+common warnings
+    ghc-options: -Wall
+
+library
+    import:           warnings
+    exposed-modules:  RfrUtilities
+                    , YmlWrapper
+    build-depends:    base >=4.17.2.1 && <4.20
+                    , aeson
+                    , text
+                    , bytestring
+                    , split
+    hs-source-dirs:   src
+    default-extensions: OverloadedStrings
+                      , ImportQualifiedPost
+    default-language: Haskell2010
+

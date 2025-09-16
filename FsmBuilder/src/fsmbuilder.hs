@@ -9,8 +9,13 @@ import System.Environment (getArgs)
 import Data.Maybe (isJust, isNothing, fromMaybe)
 import System.Directory (createDirectoryIfMissing)
 import Data.Char (toUpper, toLower)
+import Data.List (intercalate)
 import qualified Text.Mustache as Mustache
 import qualified Data.Aeson as Aeson
+import qualified Data.Text as T
+import RfrUtilities (capitalize)
+import qualified InputBuilder as IB
+import qualified OutputBuilder as OB
 
 -- TODO: do not make it overwrite existing files!!!
 
@@ -31,6 +36,8 @@ data RawTransition = RawTransition
   { rawSourceId :: String
   , rawTargetId :: String
   } deriving (Show, Eq)
+
+
 
 -- Recursively get all elements in the XML tree (elChildren: returns a list of child Elements for a given XML Element. concatMap: apply universe to every element and concatenate into one list)
 universe :: Element -> [Element]
@@ -81,22 +88,88 @@ parseXml content =
           states = createStates startId rawStates rawTransitions
       in states
 
--- Capitalize the first letter of a string
-capitalize :: String -> String
-capitalize [] = []
-capitalize (x:xs) = toUpper x : xs
-
 -- Lowercase the first letter of a string
 lowercaseFirst :: String -> String
 lowercaseFirst [] = []
 lowercaseFirst (x:xs) = toLower x : xs
 
+-- Generate controller imports from a list of controller names
+generateControllerImports :: [String] -> String
+generateControllerImports controllerNames = 
+  let imports = map (\name -> "import Helpers.Controllers." ++ capitalize name) controllerNames
+  in unlines imports
+
+-- Generate decode statements for critical controllers
+generateCriticalControllerDecodes :: [IB.RawControllerInputState] -> String
+generateCriticalControllerDecodes controllers =
+  let criticalControllers = filter IB.rawCritical controllers
+      decodeStatements = map generateDecodeStatement criticalControllers
+  in unlines decodeStatements
+  where
+    generateDecodeStatement controller =
+      let controllerName = IB.rawControllerName controller
+          capitalizedName = capitalize controllerName
+      in "  let (" ++ controllerName ++ ", " ++ controllerName ++ "ErrFlag, " ++ controllerName ++ "DebugMsg) = decode" ++ capitalizedName ++ "State inputStr"
+
+-- Generate default output type declarations
+generateDefaultOutputTypes :: [OB.RawControllerOutputState] -> String
+generateDefaultOutputTypes outputControllers =
+  let defaultStatements = map generateDefaultStatement outputControllers
+  in unlines defaultStatements
+  where
+    generateDefaultStatement controller =
+      let controllerName = OB.rawOutputControllerName controller
+          capitalizedName = capitalize controllerName
+          outputs = OB.rawOutputs controller
+          defaultFields = map generateDefaultField outputs
+          fieldsStr = intercalate ", " defaultFields
+      in "  let " ++ controllerName ++ "Out = " ++ capitalizedName ++ " { " ++ fieldsStr ++ " }"
+    
+    generateDefaultField output =
+      let fieldName = OB.rawOutputName output
+          fieldType = OB.rawOutputType output
+          defaultValue = getDefaultValueForType fieldType
+      in fieldName ++ " = " ++ defaultValue
+    
+    getDefaultValueForType :: OB.OutputType -> String
+    getDefaultValueForType OB.OutputInteger = "0"
+    getDefaultValueForType OB.OutputDouble = "0.0"
+    getDefaultValueForType OB.OutputString = "\"\""
+    getDefaultValueForType OB.OutputBool = "False"
+    getDefaultValueForType (OB.OutputArray _) = "[]"
+
+-- Generate OutputData field assignments
+generateOutputDataFields :: [OB.RawControllerOutputState] -> String
+generateOutputDataFields outputControllers =
+  let fieldAssignments = map generateFieldAssignment outputControllers
+  in intercalate ", " fieldAssignments
+  where
+    generateFieldAssignment controller =
+      let controllerName = OB.rawOutputControllerName controller
+      in controllerName ++ " = " ++ controllerName ++ "Out"
+
+-- Generate input errors and debug messages tuples
+generateInputErrorsDebugs :: [IB.RawControllerInputState] -> String
+generateInputErrorsDebugs controllers =
+  let criticalControllers = filter IB.rawCritical controllers
+      errorTuples = map generateErrorTuple criticalControllers
+  in intercalate ", " errorTuples
+  where
+    generateErrorTuple controller =
+      let controllerName = IB.rawControllerName controller
+      in "(\"" ++ controllerName ++ "\", " ++ controllerName ++ "ErrFlag, " ++ controllerName ++ "DebugMsg)"
+
 -- Generate a state file from a State datatype using the template TODO: generate the import Inputs based on YML file
-writeStateFile :: State -> IO ()
-writeStateFile st = do
+writeStateFile :: [String] -> [IB.RawControllerInputState] -> [OB.RawControllerOutputState] -> State -> IO ()
+writeStateFile controllerNames controllers outputControllers st = do
   let stateName = capitalize (name st)
       moduleName = "Helpers.States." ++ stateName
       fileName = "FsmRunner/src/Helpers/States/" ++ lowercaseFirst stateName ++ "State.hs"
+      controllerImports = generateControllerImports controllerNames
+      criticalDecodes = generateCriticalControllerDecodes controllers
+      defaultOutputTypes = generateDefaultOutputTypes outputControllers
+      outputDataFields = generateOutputDataFields outputControllers
+      inputErrorsDebugs = generateInputErrorsDebugs controllers
   eTemplate <- Mustache.automaticCompile ["./FsmBuilder/templates"] "state.mustache"
   case eTemplate of
     Left err -> putStrLn $ "Template parse error: " ++ show err
@@ -105,10 +178,17 @@ writeStateFile st = do
             [ "stateName" Aeson..= stateName
             , "stateNameLower" Aeson..= lowercaseFirst stateName
             , "moduleName" Aeson..= moduleName
+            , "import_controllers" Aeson..= controllerImports
+            , "decode_critical_controllers" Aeson..= criticalDecodes
+            , "default_outputtypes" Aeson..= defaultOutputTypes
+            , "outputdata" Aeson..= outputDataFields
+            , "input_errors_debugs" Aeson..= inputErrorsDebugs
             ]
           rendered = Mustache.substitute template context
       createDirectoryIfMissing True "states"
-      writeFile fileName (show rendered)
+      -- replace HTML entity &quot; with real double-quote and write
+      let fixed = T.replace "&quot;" "\"" rendered
+      writeFile fileName (T.unpack fixed)
 
 -- Generate import and mapping lines for a list of State names
 createMappingEntries :: [String] -> String
@@ -118,33 +198,30 @@ createMappingEntries stateNames =
       mapLine s = "  | eventOutput == \"" ++ s ++ "State\"  = kSwitch " ++ s ++ "StateSF analyzer" ++ cap s ++ "State mapping"
       imports = unlines $ map imp stateNames
       mappings = unlines $ map mapLine stateNames
-  in imports ++ "\n" ++ "mapping :: SF String (Double, Double, Bool, String) -> String -> SF String (Double, Double, Bool, String)\nmapping startingSF eventOutput\n" ++ mappings ++ "  | otherwise = errorStateSF\n"
+  in imports ++ "\n" ++ "mapping :: SF String OutputState -> String -> SF String OutputState\nmapping startingSF eventOutput\n" ++ mappings ++ "  | otherwise = errorStateSF\n"
 
 -- Generate a control.hs file from a list of State names
-writeControllogicFile :: [State] -> IO ()
-writeControllogicFile states = do
+writeControllogicFile :: [String] -> [IB.RawControllerInputState] -> [OB.RawControllerOutputState] -> [State] -> IO ()
+writeControllogicFile controllerNames controllers outputControllers states = do
   let stateNames = map name states
       startState = capitalize (head stateNames)
+      startStateLower = lowercaseFirst (head stateNames)
       mappingEntries = createMappingEntries (map lowercaseFirst stateNames)
-      content = unlines
-        [ "{-# LANGUAGE Arrows #-}"
-        , ""
-        , "module Controllogic where"
-        , ""
-        , "import Control.Concurrent"
-        , "import FRP.Yampa"
-        , "import Helpers.Turtlebot"
-        , "import Helpers.KeyboardController"
-        , "import Helpers.YampaHelper"
-        , "import Data.Bool (Bool (False))"
-        , "import Numeric (showFFloat)"
-        , ""
-        , mappingEntries
-        , "-- MAIN"
-        , "mainSF :: SF String (Double, Double, Bool, String)"
-        , "mainSF = kSwitch " ++ lowercaseFirst startState ++ "SF analyzer" ++ startState ++ "State mapping"
-        ]
-  writeFile "FsmRunner/src/controllogic.hs" content
+      controllerImports = generateControllerImports controllerNames
+      
+  eTemplate <- Mustache.automaticCompile ["./FsmBuilder/templates"] "controllogic.mustache"
+  case eTemplate of
+    Left err -> putStrLn $ "Template parse error: " ++ show err
+    Right template -> do
+      let context = Aeson.object
+            [ "import_controllers" Aeson..= controllerImports
+            , "mappingEntries" Aeson..= mappingEntries
+            , "startState" Aeson..= startState
+            , "startStateLower" Aeson..= startStateLower
+            ]
+          rendered = Mustache.substitute template context
+      writeFile "FsmRunner/src/controllogic.hs" (T.unpack rendered)
+      putStrLn "Wrote FsmRunner/src/controllogic.hs"
 
 -- Generate diagramData JS code for Mermaid from a list of State
 createDiagramDataJS :: [State] -> String
@@ -295,3 +372,10 @@ writeFSMHtmlFile states = do
         ]
   writeFile "FsmRunner/src/fsm.html" htmlContent
 
+
+main :: [String] -> [IB.RawControllerInputState] -> [OB.RawControllerOutputState] -> [State] -> IO ()
+main controllerNames controllers outputControllers states = do
+  mapM_ (writeStateFile controllerNames controllers outputControllers) states
+  writeControllogicFile controllerNames controllers outputControllers states
+  -- writeFSMHtmlFile states TODO FIXME
+  putStrLn "FSM files generated successfully."

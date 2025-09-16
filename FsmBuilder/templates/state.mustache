@@ -4,32 +4,37 @@ module {{moduleName}}State where
 
 import Control.Concurrent
 import FRP.Yampa
-import Helpers.Turtlebot
-import Helpers.KeyboardController
 import Helpers.YampaHelper
+{{import_controllers}}
 
-{{stateNameLower}}SF :: SF String (Double, Double, Bool, String)
-{{stateNameLower}}SF = proc inputStr -> do
-  -- Decode turtlebot for string
-  let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState inputStr
-  let (keyboardcontroller, keyboardcontrollerErrFlag, keyboardcontrollerDebugMsg) = decodeKeyboardControllerState inputStr
-
-  -- #### Control logic ####
+{{stateNameLower}}StateSF :: SF String OutputState
+{{stateNameLower}}StateSF = proc inputStr -> do
+  -- Decode inputs for string
+{{decode_critical_controllers}}
+  -- Create default types for Output
+{{default_outputtypes}}
+    
+  -- #### Control logic CHANGE THE DEFAULT OUTPUT VALUES TO THE DESIRED VALUE ####
 
   -- #### END: Control logic ####
 
+  -- Create OutputData with state name
+  let outputData = OutputData { {{outputdata}}, state = "{{stateName}}" }
   -- Create the error string
-  let (errFlag, debugMsg) = createErrFlagAndDebugMsg [("turtlebot", turtlebotErrFlag, turtlebotDebugMsg),("keyboardController", keyboardcontrollerErrFlag, keyboardcontrollerDebugMsg)]
+  let (errFlag, debugMsg) = createErrFlagAndDebugMsg [ {{input_errors_debugs}} ]
   -- Add your own values for debugging
-  let specialDebugString = if errFlag then "DEBUG:: " ++ debugMsg else "STATE: {{stateName}} :: "
+  let specialDebugString = if errFlag then "DEBUG:: " ++ debugMsg else "STATE: {{stateNameLower}} :: "
   -- To stop simulation
   let debugString
-        | quit keyboardcontroller || errFlag = "STOPSIM " ++ specialDebugString
+        | errFlag = "STOPSIM " ++ specialDebugString
         | otherwise = specialDebugString
+  
+  -- Create OutputState
+  let outputState = OutputState { outputData = outputData, errorFlag = errFlag, debugString = debugString }
 
-  returnA -< (leftWheelVelocityInRadSec,rightWheelVelocityInRadSec,errFlag,debugString)
+  returnA -< outputState
 
-analyzer{{stateName}}State :: SF (String, (Double, Double, Bool, String)) (Event (String))
+analyzer{{stateName}}State :: SF (String, OutputState) (Event (String))
 analyzer{{stateName}}State = proc (sfInput, sfOutput) -> do
   e <- edgeTag "newStateName" -< True 
-  returnA -< ""
+  returnA -< e

@@ -2,7 +2,6 @@ cabal-version:      3.0
 name:               fsmrunner
 version:            0.1.0.0
 license:            Apache-2.0
-license-file:       LICENSE
 author:             ArneDuyver
 maintainer:         arne_duyver@hotmail.com
 build-type:         Simple
@@ -14,14 +13,14 @@ common warnings
 -- TODO: generate state dependencies
 executable fsmrunner
     ghc-options:      -threaded
-    exposed-modules:  Controllogic
     other-modules:    Controllogic
                     , Helpers.MqttHelper
                     , Helpers.Simple
                     , Helpers.Turtlebot
                     , Helpers.YampaHelper
                     , Helpers.Controllers.OutputState
-                    , Helpers.Controllers.Simple
+                    , Helpers.Controllers.SimpleOne
+                    , Helpers.Controllers.SimpleTwo
                     
     build-depends:    base >=4.17.2.1 && <4.20
                     , ansi-terminal
@@ -35,6 +34,7 @@ executable fsmrunner
                     , split
                     , aeson
                     , Yampa
+                    , rfrlibrary
     hs-source-dirs:   src
     default-language: Haskell2010
     main-is:          Main.hs

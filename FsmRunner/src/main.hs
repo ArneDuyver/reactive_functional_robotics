@@ -17,39 +17,42 @@ import Helpers.Turtlebot
 import Controllogic
 import Control.Monad (unless, when)
 import Helpers.Controllers.OutputState
--- FIXME TODO get from .env file
-mqttBroker :: String
-mqttBroker = "mqtt://localhost:1883"
-
-fromSimTopic :: String
-fromSimTopic = "test/fromsim"
-
-toSimTopic :: String
-toSimTopic = "test/tosim"
+import RfrUtilities (getMqttConfig)
+-- MQTT configuration will be loaded from .env file
 
 main :: IO ()
 main = do
-  eventChan <- newTBQueueIO 10 -- Create event queue for messages received by MQTT, capacity 10
-  stopSignal <- newEmptyMVar
-  forkIO $ do
-    -- Create a parallel subprocess to listen for MQTT messages
-    (session, mc) <- subToTopic mqttBroker fromSimTopic eventChan
-    waitForClient mc
-    takeMVar stopSignal  -- Wait for signal to stop
-    normalDisconnect mc
-  currentTime <- getCurrentTimeInMs -- Save the current time in Ms to compare new messages to
-  currentTimeGlobal <- newMVar currentTime
-  let initialValue = initialize eventChan currentTimeGlobal
-  let inputStream = sense eventChan currentTimeGlobal
-  let (Just uri) = parseURI mqttBroker
-  mqttConnection <- connectURI mqttConfig uri
-  _ <- reactimate initialValue inputStream (actuate mqttConnection) mainSF
-  normalDisconnect mqttConnection
-  putMVar stopSignal ()
+  -- Load MQTT configuration from .env file
+  mqttConfigResult <- getMqttConfig "./config/.env"
+  case mqttConfigResult of
+    Nothing -> putStrLn "Error: Could not load MQTT configuration from ./config/.env"
+    Just (host, port, fromTopic, toTopic) -> do
+      let mqttBroker = host ++ ":" ++ port
+      let fromSimTopic = toTopic
+      let toSimTopic = fromTopic
+      -- TODO CHECK ABOVE order is weird !!!!!
+      
+      eventChan <- newTBQueueIO 10 -- Create event queue for messages received by MQTT, capacity 10
+      stopSignal <- newEmptyMVar
+      forkIO $ do
+        -- Create a parallel subprocess to listen for MQTT messages
+        (session, mc) <- subToTopic mqttBroker fromSimTopic eventChan
+        waitForClient mc
+        takeMVar stopSignal  -- Wait for signal to stop
+        normalDisconnect mc
+      currentTime <- getCurrentTimeInMs -- Save the current time in Ms to compare new messages to
+      currentTimeGlobal <- newMVar currentTime
+      let initialValue = initialize eventChan currentTimeGlobal
+      let inputStream = sense eventChan currentTimeGlobal
+      let (Just uri) = parseURI mqttBroker
+      mqttConnection <- connectURI mqttConfig uri
+      _ <- reactimate initialValue inputStream (actuate mqttConnection toSimTopic) mainSF
+      normalDisconnect mqttConnection
+      putMVar stopSignal ()
   
 -- Actuate: do what needs to happen with the output of the reactive network
-actuate :: MQTTClient -> Bool -> OutputState -> IO Bool
-actuate mqttConnection _ value = do
+actuate :: MQTTClient -> String -> Bool -> OutputState -> IO Bool
+actuate mqttConnection toSimTopic _ value = do
   let fsmoutput = outputData value
   let errFlag = errorFlag value
   let debugMsg = debugString value
@@ -58,6 +61,5 @@ actuate mqttConnection _ value = do
   let stopSim = take 7 (debugMsg) == "STOPSIM"
   return stopSim -- False means the program keeps running
 
--- FOR DEBUGGING
 
 

@@ -1,8 +1,8 @@
 ## TODO: DELETE ME
 ## Variables
 host=localhost
-topic2=fsm/input/sim
-topic1=fsm/input/controller
+topic2=fsm/input/simpleTwo
+topic1=fsm/input/simpleOne
 message=Hello, world!
 
 ## Establish connection
@@ -14,6 +14,7 @@ url: mqtt://{{host}}:1883
 {{topic1}}
 {{topic2}}
 fsm/toenv
+fsm/fromenv
 
 ## Publish to topics
 
@@ -21,8 +22,8 @@ fsm/toenv
 topic: {{topic1}}
 
 {
-    "controller": {
-        "test": 4
+    "simpleOne": {
+        "sensorOne": 4
     }
 }
 
@@ -30,7 +31,9 @@ topic: {{topic1}}
 topic: {{topic2}}
 
 {
-    "sim": "sim"
+    "simpleTwo": {
+        "testInput": "Hello"
+    }
 }
 
 # ## Publish

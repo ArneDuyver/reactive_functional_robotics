@@ -1,1 +1,45 @@
-"{-# LANGUAGE Arrows #-}\n\nmodule Helpers.States.EndState where\n\nimport Control.Concurrent\nimport FRP.Yampa\nimport Helpers.Turtlebot\nimport Helpers.KeyboardController\nimport Helpers.YampaHelper\n\nendSF :: SF String (Double, Double, Bool, String)\nendSF = proc inputStr -> do\n  -- Decode turtlebot for string\n  let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState inputStr\n  let (keyboardcontroller, keyboardcontrollerErrFlag, keyboardcontrollerDebugMsg) = decodeKeyboardControllerState inputStr\n\n  -- #### Control logic ####\n\n  -- #### END: Control logic ####\n\n  -- Create the error string\n  let (errFlag, debugMsg) = createErrFlagAndDebugMsg [(\"turtlebot\", turtlebotErrFlag, turtlebotDebugMsg),(\"keyboardController\", keyboardcontrollerErrFlag, keyboardcontrollerDebugMsg)]\n  -- Add your own values for debugging\n  let specialDebugString = if errFlag then \"DEBUG:: \" ++ debugMsg else \"STATE: End :: \"\n  -- To stop simulation\n  let debugString\n        | quit keyboardcontroller || errFlag = \"STOPSIM \" ++ specialDebugString\n        | otherwise = specialDebugString\n\n  returnA -< (leftWheelVelocityInRadSec,rightWheelVelocityInRadSec,errFlag,debugString)\n\nanalyzerEndState :: SF (String, (Double, Double, Bool, String)) (Event (String))\nanalyzerEndState = proc (sfInput, sfOutput) -> do\n  e <- edgeTag \"newStateName\" -< True \n  returnA -< \"\""
+{-# LANGUAGE Arrows #-}
+
+module Helpers.States.EndState where
+
+import Control.Concurrent
+import FRP.Yampa
+import Helpers.YampaHelper
+import Helpers.Controllers.SimpleOne
+import Helpers.Controllers.SimpleTwo
+import Helpers.Controllers.OutputState
+
+
+endStateSF :: SF String OutputState
+endStateSF = proc inputStr -> do
+  -- Decode inputs for string
+  let (simpleOne, simpleOneErrFlag, simpleOneDebugMsg) = decodeSimpleOneState inputStr
+
+  -- Create default types for Output
+  let simpleOneOut = SimpleOne { actuatorOne = 0 }
+
+    
+  -- #### Control logic CHANGE THE DEFAULT OUTPUT VALUES TO THE DESIRED VALUE ####
+
+  -- #### END: Control logic ####
+
+  -- Create OutputData with state name
+  let outputData = OutputData { simpleOne = simpleOneOut, state = "End" }
+  -- Create the error string
+  let (errFlag, debugMsg) = createErrFlagAndDebugMsg [ ("simpleOne", simpleOneErrFlag, simpleOneDebugMsg) ]
+  -- Add your own values for debugging
+  let specialDebugString = if errFlag then "DEBUG:: " ++ debugMsg else "STATE: end :: "
+  -- To stop simulation
+  let debugString
+        | errFlag = "STOPSIM " ++ specialDebugString
+        | otherwise = specialDebugString
+  
+  -- Create OutputState
+  let outputState = OutputState { outputData = outputData, errorFlag = errFlag, debugString = debugString }
+
+  returnA -< outputState
+
+analyzerEndState :: SF (String, OutputState) (Event (String))
+analyzerEndState = proc (sfInput, sfOutput) -> do
+  e <- edgeTag "newStateName" -< True 
+  returnA -< e
