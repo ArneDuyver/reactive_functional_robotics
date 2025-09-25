@@ -16,7 +16,7 @@ endStateSF = proc inputStr -> do
   let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState inputStr
 
   -- Create default types for Output
-  let turtlebotOut = Turtlebot { motorLeft = 0, motorRight = 0 }
+  let turtlebotOut = defaultTurtlebot
 
     
   -- #### Control logic CHANGE THE DEFAULT OUTPUT VALUES TO THE DESIRED VALUE ####

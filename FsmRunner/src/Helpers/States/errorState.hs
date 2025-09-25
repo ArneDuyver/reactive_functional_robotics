@@ -1,21 +1,26 @@
 {-# LANGUAGE Arrows #-}
 
-module {{moduleName}} where
+module Helpers.States.ErrorState where
 
 import Control.Concurrent
 import FRP.Yampa
 import Helpers.YampaHelper
-{{{import_controllers}}}
+import Helpers.Controllers.Turtlebot
+import Helpers.Controllers.SimpleTwo
+import Helpers.Controllers.OutputState
+
 
 
 errorStateSF :: SF String OutputState
 errorStateSF = proc inputStr -> do
-{{{decode_critical_controllers}}}
+  let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState inputStr
+
   -- Create default types for Output using default constructors
-{{{default_outputtypes}}}
+  let turtlebotOut = defaultTurtlebot
+
 
   -- Create OutputData with error state name
-  let outputData = OutputData { {{outputdata}}, state = "Error" }
+  let outputData = OutputData { turtlebot = turtlebotOut, state = "Error" }
   -- Create the error string for unknown state transitions
   let errFlag = True
   let debugMsg = "ERROR: Unknown state transition occurred"

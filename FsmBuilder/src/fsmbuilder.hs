@@ -9,6 +9,7 @@ import Data.List (intercalate)
 import Data.Maybe (fromMaybe, isJust, isNothing)
 import Data.Text qualified as T
 import InputBuilder qualified as IB
+import MixedBuilder qualified as MB
 import OutputBuilder qualified as OB
 import RfrUtilities (capitalize)
 import System.Directory (createDirectoryIfMissing)
@@ -112,7 +113,7 @@ generateCriticalControllerDecodes controllers =
           capitalizedName = capitalize controllerName
        in "  let (" ++ controllerName ++ ", " ++ controllerName ++ "ErrFlag, " ++ controllerName ++ "DebugMsg) = decode" ++ capitalizedName ++ "State inputStr"
 
--- Generate default output type declarations
+-- Generate default output type declarations using the generated default constructors
 generateDefaultOutputTypes :: [OB.RawControllerOutputState] -> String
 generateDefaultOutputTypes outputControllers =
   let defaultStatements = map generateDefaultStatement outputControllers
@@ -121,23 +122,7 @@ generateDefaultOutputTypes outputControllers =
     generateDefaultStatement controller =
       let controllerName = OB.rawOutputControllerName controller
           capitalizedName = capitalize controllerName
-          outputs = OB.rawOutputs controller
-          defaultFields = map generateDefaultField outputs
-          fieldsStr = intercalate ", " defaultFields
-       in "  let " ++ controllerName ++ "Out = " ++ capitalizedName ++ " { " ++ fieldsStr ++ " }"
-
-    generateDefaultField output =
-      let fieldName = OB.rawOutputName output
-          fieldType = OB.rawOutputType output
-          defaultValue = getDefaultValueForType fieldType
-       in fieldName ++ " = " ++ defaultValue
-
-    getDefaultValueForType :: OB.OutputType -> String
-    getDefaultValueForType OB.OutputInteger = "0"
-    getDefaultValueForType OB.OutputDouble = "0.0"
-    getDefaultValueForType OB.OutputString = "\"\""
-    getDefaultValueForType OB.OutputBool = "False"
-    getDefaultValueForType (OB.OutputArray _) = "[]"
+       in "  let " ++ controllerName ++ "Out = default" ++ capitalizedName
 
 -- Generate OutputData field assignments
 generateOutputDataFields :: [OB.RawControllerOutputState] -> String
@@ -159,6 +144,37 @@ generateInputErrorsDebugs controllers =
     generateErrorTuple controller =
       let controllerName = IB.rawControllerName controller
        in "(\"" ++ controllerName ++ "\", " ++ controllerName ++ "ErrFlag, " ++ controllerName ++ "DebugMsg)"
+
+-- Generate the ErrorState file using the errorstate template
+writeErrorStateFile :: [String] -> [IB.RawControllerInputState] -> [OB.RawControllerOutputState] -> IO ()
+writeErrorStateFile controllerNames controllers outputControllers = do
+  let stateName = "Error" :: String
+      moduleName = "Helpers.States.ErrorState" :: String
+      fileName = "FsmRunner/src/Helpers/States/errorState.hs" :: String
+      controllerImports = generateControllerImports controllerNames
+      criticalDecodes = generateCriticalControllerDecodes controllers
+      defaultOutputTypes = generateDefaultOutputTypes outputControllers
+      outputDataFields = generateOutputDataFields outputControllers
+      inputErrorsDebugs = generateInputErrorsDebugs controllers
+  eTemplate <- Mustache.automaticCompile ["./FsmBuilder/templates"] "errorstate.mustache"
+  case eTemplate of
+    Left err -> putStrLn $ "Template parse error: " ++ show err
+    Right template -> do
+      let context =
+            Aeson.object
+              [ "stateName" Aeson..= stateName,
+                "moduleName" Aeson..= moduleName,
+                "import_controllers" Aeson..= controllerImports,
+                "decode_critical_controllers" Aeson..= criticalDecodes,
+                "default_outputtypes" Aeson..= defaultOutputTypes,
+                "outputdata" Aeson..= outputDataFields,
+                "input_errors_debugs" Aeson..= inputErrorsDebugs
+              ]
+          rendered = Mustache.substitute template context
+      -- replace HTML entity &quot; with real double-quote and write
+      let fixed = T.replace "&quot;" "\"" rendered
+      writeFile fileName (T.unpack fixed)
+      putStrLn $ "Wrote " ++ fileName
 
 -- Generate a state file from a State datatype using the template TODO: generate the import Inputs based on YML file
 writeStateFile :: [String] -> [IB.RawControllerInputState] -> [OB.RawControllerOutputState] -> State -> IO ()
@@ -377,7 +393,10 @@ writeFSMHtmlFile states = do
 
 main :: [String] -> [IB.RawControllerInputState] -> [OB.RawControllerOutputState] -> [State] -> IO ()
 main controllerNames controllers outputControllers states = do
+  let stateNames = map name states
   mapM_ (writeStateFile controllerNames controllers outputControllers) states
+  writeErrorStateFile controllerNames controllers outputControllers
   writeControllogicFile controllerNames controllers outputControllers states
+  MB.main controllers outputControllers stateNames
   -- writeFSMHtmlFile states TODO FIXME
   putStrLn "FSM files generated successfully."

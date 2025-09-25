@@ -16,11 +16,11 @@ simpleStateSF = proc inputStr -> do
   let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState inputStr
 
   -- Create default types for Output
-  let turtlebotOut = Turtlebot { motorLeft = 0, motorRight = 0 }
+  let turtlebotOut = defaultTurtlebot
 
     
   -- #### Control logic CHANGE THE DEFAULT OUTPUT VALUES TO THE DESIRED VALUE ####
-  let turtlebotOut = Turtlebot { motorLeft = 3, motorRight = 3 }
+
   -- #### END: Control logic ####
 
   -- Create OutputData with state name
@@ -41,6 +41,5 @@ simpleStateSF = proc inputStr -> do
 
 analyzerSimpleState :: SF (String, OutputState) (Event (String))
 analyzerSimpleState = proc (sfInput, sfOutput) -> do
-  timeAfter <- time -< ()
-  e <- edgeTag "endState" -< timeAfter >= 15
+  e <- edgeTag "newStateName" -< True 
   returnA -< e

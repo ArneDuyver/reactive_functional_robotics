@@ -14,11 +14,17 @@ import Data.Maybe (fromMaybe)
 import Data.Text (pack)
 
 data Turtlebot = Turtlebot
-  { motorLeft :: Integer
-  , motorRight :: Integer
+  { motorLeft :: Double
+  , motorRight :: Double
   } deriving (Show, Eq, Generic)
 
 instance ToJSON Turtlebot
+
+defaultTurtlebot :: Turtlebot
+defaultTurtlebot = Turtlebot
+  { motorLeft = 0.0
+  , motorRight = 0.0
+  }
 
 data OutputData = OutputData
   { 

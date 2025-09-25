@@ -1,0 +1,39 @@
+cabal-version:      3.0
+name:               fsmrunner
+version:            0.1.0.0
+license:            Apache-2.0
+author:             ArneDuyver
+maintainer:         arne_duyver@hotmail.com
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+
+common warnings
+    ghc-options: -Wall
+
+executable fsmrunner
+    ghc-options:      -threaded
+    other-modules:    Controllogic
+                    , Helpers.MqttHelper
+                    , Helpers.Simple
+                    , Helpers.Turtlebot
+                    , Helpers.YampaHelper
+                    , Helpers.Controllers.OutputState
+{{controller_modules}}{{state_modules}}
+                    , Helpers.States.ErrorState
+                    
+    build-depends:    base >=4.17.2.1 && <4.20
+                    , ansi-terminal
+                    , bytestring
+                    , network-uri
+                    , net-mqtt
+                    , text
+                    , bytestring
+                    , stm
+                    , time
+                    , split
+                    , aeson
+                    , Yampa
+                    , rfrlibrary
+    hs-source-dirs:   src
+    default-language: Haskell2010
+    main-is:          Main.hs

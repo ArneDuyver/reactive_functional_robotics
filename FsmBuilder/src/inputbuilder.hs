@@ -1,54 +1,56 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module InputBuilder where
 
-import RfrUtilities (capitalize)
-import qualified Data.Yaml as Yaml
-import qualified Data.Aeson as Aeson
-import Data.Aeson (Value(..))
-import qualified Data.Aeson.KeyMap as KM
-import qualified Data.Vector as V
-import qualified Text.Mustache as Mustache
-import qualified Data.Text as T
-import qualified Data.Text.IO as TIO
-import qualified Data.Scientific as Scientific
+import Data.Aeson (Value (..))
+import Data.Aeson qualified as Aeson
+import Data.Aeson.KeyMap qualified as KM
 import Data.List (intercalate)
+import Data.Scientific qualified as Scientific
+import Data.Text qualified as T
+import Data.Text.IO qualified as TIO
+import Data.Vector qualified as V
+import Data.Yaml qualified as Yaml
+import RfrUtilities (capitalize)
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>))
+import Text.Mustache qualified as Mustache
 
 -- Intermediate representation for parsing
 data RawControllerInputState = RawControllerInputState
-  { rawControllerName :: String
-  , rawCritical :: Bool
-  , rawInputs :: [RawControllerInputs]
-  } deriving (Show, Eq)
+  { rawControllerName :: String,
+    rawCritical :: Bool,
+    rawInputs :: [RawControllerInputs]
+  }
+  deriving (Show, Eq)
 
 -- Intermediate representation for parsing controller inputs
 data RawControllerInputs = RawControllerInputs
-  { rawInputName :: String
-  , rawInputType :: InputType
-  , rawDefault :: Maybe DefaultValue
-  } deriving (Show, Eq)
+  { rawInputName :: String,
+    rawInputType :: InputType,
+    rawDefault :: Maybe DefaultValue
+  }
+  deriving (Show, Eq)
 
 -- Represents possible input types from the configuration
-data InputType = 
-    InputInteger
+data InputType
+  = InputInteger
   | InputDouble
   | InputString
   | InputBool
-  | InputArray InputType  -- For nested arrays
+  | InputArray InputType -- For nested arrays
   deriving (Show, Eq)
 
 -- Represents possible default values matching the input types
-data DefaultValue = 
-    DefaultInteger Integer
+data DefaultValue
+  = DefaultInteger Integer
   | DefaultDouble Double
   | DefaultString String
   | DefaultBool Bool
   | DefaultArray [DefaultValue]
   | DefaultNull
-  | DefaultInvalid  -- for invalid/unsupported values
+  | DefaultInvalid -- for invalid/unsupported values
   deriving (Show, Eq)
 
 parseInputTypeFromYaml :: String -> Maybe String -> InputType
@@ -62,10 +64,10 @@ parseInputTypeFromYaml _ _ = InputString
 -- Convert Aeson Value to our DefaultValue type
 parseDefaultValue :: Value -> DefaultValue
 parseDefaultValue (String s) = DefaultString (T.unpack s)
-parseDefaultValue (Number n) = 
-    case Scientific.floatingOrInteger n of
-        Right i -> DefaultInteger i
-        Left d -> DefaultDouble d
+parseDefaultValue (Number n) =
+  case Scientific.floatingOrInteger n of
+    Right i -> DefaultInteger i
+    Left d -> DefaultDouble d
 parseDefaultValue (Bool b) = DefaultBool b
 parseDefaultValue (Array arr) = DefaultArray (map parseDefaultValue (V.toList arr))
 parseDefaultValue Null = DefaultNull
@@ -77,13 +79,13 @@ getArrayType obj = case KM.lookup "arrayType" obj of
   _ -> Nothing
 
 parseRawInput :: Aeson.Value -> RawControllerInputs
-parseRawInput (Object m) = 
+parseRawInput (Object m) =
   case KM.toList m of
-    ((_, Object inputObj):_) ->
+    ((_, Object inputObj) : _) ->
       RawControllerInputs
-        { rawInputName = getText "name"
-        , rawInputType = parseInputTypeFromYaml (getText "type") (getArrayType inputObj)
-        , rawDefault = parseDefaultValue <$> KM.lookup "default" inputObj
+        { rawInputName = getText "name",
+          rawInputType = parseInputTypeFromYaml (getText "type") (getArrayType inputObj),
+          rawDefault = parseDefaultValue <$> KM.lookup "default" inputObj
         }
       where
         getText key = case KM.lookup key inputObj of
@@ -96,15 +98,15 @@ parseRawInput _ = RawControllerInputs "" InputString Nothing
 parseController :: Aeson.Value -> RawControllerInputState
 parseController (Object controllerObj) =
   case KM.toList controllerObj of
-    ((_, Object metaControllerObj):_) -> 
-      RawControllerInputState 
+    ((_, Object metaControllerObj) : _) ->
+      RawControllerInputState
         { rawControllerName = case KM.lookup "name" metaControllerObj of
             Just (String s) -> T.unpack s
-            _ -> "DefaultParseControllerName"
-        , rawCritical = case KM.lookup "critical" metaControllerObj of
+            _ -> "DefaultParseControllerName",
+          rawCritical = case KM.lookup "critical" metaControllerObj of
             Just (Bool b) -> b
-            _ -> False
-        , rawInputs = case KM.lookup "inputs" metaControllerObj of
+            _ -> False,
+          rawInputs = case KM.lookup "inputs" metaControllerObj of
             Just (Array inputs) -> map parseRawInput (V.toList inputs)
             _ -> []
         }
@@ -115,7 +117,6 @@ parseController _ = RawControllerInputState "DefaultParseControllerName_KeyMapCo
 generateRawControllers :: V.Vector Aeson.Value -> [RawControllerInputState]
 generateRawControllers controllersArr = map parseController (V.toList controllersArr)
 
-
 -- Build controller context and render template
 generateController :: RawControllerInputState -> IO ()
 generateController controller = do
@@ -123,28 +124,29 @@ generateController controller = do
   let controllernameCapitalized = capitalize controllername
 
   -- Convert RawControllerInputs to the format needed for template
-  let convertInput input = 
-        ( rawInputName input
-        , inputTypeToHaskellType (rawInputType input)
-        , maybe "\"\"" defaultValueToString (rawDefault input)
+  let convertInput input =
+        ( rawInputName input,
+          inputTypeToHaskellType (rawInputType input),
+          maybe "\"\"" defaultValueToString (rawDefault input)
         )
-      
+
   let parsedInputs = map convertInput (rawInputs controller)
   let defaultFor = "\"\"" -- empty string literal as safe default
-  let controllerInputs = intercalate "\n  , " $ map (\(n,t,_) -> n ++ " :: " ++ t) parsedInputs
-  let controllerInputDefaults = intercalate "\n  , " $ map (\(n,_,md) -> n ++ " = " ++ md) parsedInputs
+  let controllerInputs = intercalate "\n  , " $ map (\(n, t, _) -> n ++ " :: " ++ t) parsedInputs
+  let controllerInputDefaults = intercalate "\n  , " $ map (\(n, _, md) -> n ++ " = " ++ md) parsedInputs
 
   -- load template and render
   eTemplate <- Mustache.automaticCompile ["./FsmBuilder/templates"] "controller.mustache"
   case eTemplate of
     Left err -> putStrLn $ "Template parse error: " ++ show err
     Right template -> do
-      let context = Aeson.object
-            [ "controllername" Aeson..= controllername
-            , "controllernameCapitalized" Aeson..= controllernameCapitalized
-            , "controllerInputs" Aeson..= controllerInputs
-            , "controllerInputDefaults" Aeson..= controllerInputDefaults
-            ]
+      let context =
+            Aeson.object
+              [ "controllername" Aeson..= controllername,
+                "controllernameCapitalized" Aeson..= controllernameCapitalized,
+                "controllerInputs" Aeson..= controllerInputs,
+                "controllerInputDefaults" Aeson..= controllerInputDefaults
+              ]
       let rendered = Mustache.substitute template context
       let outDir = "FsmRunner/src/Helpers/Controllers"
       let outFile = outDir </> controllernameCapitalized ++ ".hs"
@@ -153,7 +155,6 @@ generateController controller = do
       let fixed = T.replace "&quot;" "\"" rendered
       TIO.writeFile outFile fixed
       putStrLn $ "Wrote " ++ outFile
-
   where
     inputTypeToHaskellType :: InputType -> String
     inputTypeToHaskellType InputInteger = "Integer"
@@ -170,7 +171,6 @@ generateController controller = do
     defaultValueToString (DefaultArray values) = "[" ++ intercalate "," (map defaultValueToString values) ++ "]"
     defaultValueToString DefaultNull = "\"\""
     defaultValueToString DefaultInvalid = "\"\""
-
 
 main :: [RawControllerInputState] -> IO ()
 main rawControllers = mapM_ generateController rawControllers
