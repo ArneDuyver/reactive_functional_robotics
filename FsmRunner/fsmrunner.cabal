@@ -19,7 +19,7 @@ executable fsmrunner
                     , Helpers.Turtlebot
                     , Helpers.YampaHelper
                     , Helpers.Controllers.OutputState
-                    , Helpers.Controllers.SimpleOne
+                    , Helpers.Controllers.Turtlebot
                     , Helpers.Controllers.SimpleTwo
                     
     build-depends:    base >=4.17.2.1 && <4.20

@@ -5,7 +5,7 @@ module Helpers.States.EndState where
 import Control.Concurrent
 import FRP.Yampa
 import Helpers.YampaHelper
-import Helpers.Controllers.SimpleOne
+import Helpers.Controllers.Turtlebot
 import Helpers.Controllers.SimpleTwo
 import Helpers.Controllers.OutputState
 
@@ -13,10 +13,10 @@ import Helpers.Controllers.OutputState
 endStateSF :: SF String OutputState
 endStateSF = proc inputStr -> do
   -- Decode inputs for string
-  let (simpleOne, simpleOneErrFlag, simpleOneDebugMsg) = decodeSimpleOneState inputStr
+  let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState inputStr
 
   -- Create default types for Output
-  let simpleOneOut = SimpleOne { actuatorOne = 0 }
+  let turtlebotOut = Turtlebot { motorLeft = 0, motorRight = 0 }
 
     
   -- #### Control logic CHANGE THE DEFAULT OUTPUT VALUES TO THE DESIRED VALUE ####
@@ -24,9 +24,9 @@ endStateSF = proc inputStr -> do
   -- #### END: Control logic ####
 
   -- Create OutputData with state name
-  let outputData = OutputData { simpleOne = simpleOneOut, state = "End" }
+  let outputData = OutputData { turtlebot = turtlebotOut, state = "End" }
   -- Create the error string
-  let (errFlag, debugMsg) = createErrFlagAndDebugMsg [ ("simpleOne", simpleOneErrFlag, simpleOneDebugMsg) ]
+  let (errFlag, debugMsg) = createErrFlagAndDebugMsg [ ("turtlebot", turtlebotErrFlag, turtlebotDebugMsg) ]
   -- Add your own values for debugging
   let specialDebugString = if errFlag then "DEBUG:: " ++ debugMsg else "STATE: end :: "
   -- To stop simulation

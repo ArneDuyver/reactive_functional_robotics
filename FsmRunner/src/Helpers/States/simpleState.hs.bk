@@ -20,7 +20,7 @@ simpleStateSF = proc inputStr -> do
 
     
   -- #### Control logic CHANGE THE DEFAULT OUTPUT VALUES TO THE DESIRED VALUE ####
-
+  let simpleOneOut = SimpleOne { actuatorOne = 1 }
   -- #### END: Control logic ####
 
   -- Create OutputData with state name
@@ -41,5 +41,6 @@ simpleStateSF = proc inputStr -> do
 
 analyzerSimpleState :: SF (String, OutputState) (Event (String))
 analyzerSimpleState = proc (sfInput, sfOutput) -> do
-  e <- edgeTag "newStateName" -< True 
+  timeAfter <- after 3 -< ()
+  e <- edgeTag "endState" -< timeAfter
   returnA -< e

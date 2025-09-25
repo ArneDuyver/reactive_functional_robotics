@@ -1,17 +1,22 @@
 
 controllers:
-  - simpleTestOne:
-      name: simpleOne
+  - turtlebot:
+      name: turtlebot
       critical: true
       inputs:
-        - sensorOne:
-            name: sensorOne
+        - frontSensor:
+            name: frontSensor
             type: Integer
-            default: -9999
+            default: 3
       outputs:
-        - actuatorOne:
-            name: actuatorOne
-            type: Integer
+        - motorLeft:
+            name: motorLeft
+            type: Double
+            default: 0.0
+        - motorRight:
+            name: motorRight
+            type: Double
+            default: 0.0
         
   - simpleTestTwo:
       name: simpleTwo

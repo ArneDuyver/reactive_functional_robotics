@@ -3,26 +3,27 @@
 
 module MessageCollector where
 
-import System.IO
+import Control.Concurrent (MVar, ThreadId, forkIO, newEmptyMVar, newMVar, putMVar, readChan, readMVar, takeMVar, threadDelay)
+import Control.Concurrent.STM (STM, TBQueue, TVar, atomically, isEmptyTBQueue, lengthTBQueue, modifyTVar, newTBQueueIO, newTVarIO, readTBQueue, readTVar, readTVarIO, writeTBQueue, writeTVar)
+import Control.Concurrent.STM.TBQueue (tryReadTBQueue)
+import Control.Monad (when)
+import Data.Aeson (Object, Value, decode, encode)
+import Data.Aeson.Key qualified as K
+import Data.Aeson.KeyMap qualified as KM
+import Data.ByteString.Lazy.Char8 qualified as B (ByteString, pack, unpack)
+import Data.HashMap.Strict qualified as HM
 import Data.List
 import Data.Maybe
-import GHC.Generics (Generic)
-import System.Environment (getArgs)
-import Control.Concurrent (ThreadId, MVar, forkIO, newMVar, putMVar, takeMVar, newEmptyMVar, readChan, readMVar, threadDelay)
-import Control.Concurrent.STM (TBQueue, STM, newTBQueueIO, atomically, writeTBQueue, readTBQueue, lengthTBQueue, isEmptyTBQueue)
-import Control.Concurrent.STM.TBQueue (tryReadTBQueue)
-import Data.ByteString.Lazy.Char8 qualified as B (ByteString, pack, unpack)
-import Data.Aeson (decode, encode, Object, Value)
-import qualified Data.Aeson.KeyMap as KM
-import qualified Data.Aeson.Key as K
-import qualified Data.HashMap.Strict as HM
-import Network.MQTT.Client (MQTTClient, MessageCallback (SimpleCallback),normalDisconnect, connectURI, waitForClient, mqttConfig, publish, subscribe, _msgCB)
-import Network.MQTT.Topic (Topic, mkFilter, mkTopic)
-import Network.MQTT.Types (RetainHandling (DoNotSendOnSubscribe), Property, QoS, SubErr, subOptions)
-import Network.URI (parseURI)
-import Control.Monad (when)
+import Data.Set qualified as Set
 import Data.Text (pack, unpack)
-import Data.Yaml (decodeFileEither, ParseException, FromJSON)
+import Data.Yaml (FromJSON, ParseException, decodeFileEither)
+import GHC.Generics (Generic)
+import Network.MQTT.Client (MQTTClient, MessageCallback (SimpleCallback), connectURI, mqttConfig, normalDisconnect, publish, subscribe, waitForClient, _msgCB)
+import Network.MQTT.Topic (Topic, mkFilter, mkTopic)
+import Network.MQTT.Types (Property, QoS, RetainHandling (DoNotSendOnSubscribe), SubErr, subOptions)
+import Network.URI (parseURI)
+import System.Environment (getArgs)
+import System.IO
 
 subToTopic :: [Char] -> [Char] -> TBQueue String -> IO (([Either Network.MQTT.Types.SubErr QoS], [Property]), MQTTClient)
 subToTopic brokerUri topic eventChan = do
@@ -33,7 +34,8 @@ subToTopic brokerUri topic eventChan = do
   return (session, mc)
 
 pubToTopic :: MQTTClient -> [Char] -> [Char] -> IO ()
-pubToTopic mc topic msg = do -- mc instead of brokerUri
+pubToTopic mc topic msg = do
+  -- mc instead of brokerUri
   let topicFilter = fromMaybe (error "Invalid topic filter") (mkTopic (pack topic))
   let msgInBytes = B.pack msg
   publish mc topicFilter msgInBytes False
@@ -52,28 +54,29 @@ getLatestMsg queue = do
 
 getEnvVarValue :: String -> IO (Maybe String)
 getEnvVarValue varName = do
-    let envFile = "config/.env"
-    contents <- readFile envFile
-    return $ lookupEnvVar varName contents
+  let envFile = "config/.env"
+  contents <- readFile envFile
+  return $ lookupEnvVar varName contents
 
 lookupEnvVar :: String -> String -> Maybe String
 lookupEnvVar name contents =
-    let ls = lines contents
-        match = find (\l -> (name ++ "=") `isPrefixOf` l) ls
-    in fmap (drop (length name + 1)) match
-
+  let ls = lines contents
+      match = find (\l -> (name ++ "=") `isPrefixOf` l) ls
+   in fmap (drop (length name + 1)) match
 
 data MqttConfig = MqttConfig
   { host :: String,
     port :: Integer,
     from_env_collection_topic :: String,
     to_env_collection_topic :: String,
-    input_topics :: [String]
+    input_topics :: [String],
+    required_input_topics :: [String]
   }
   deriving (Show, Generic)
 
 data ConfigController = ConfigController
-  { name :: String
+  { name :: String,
+    critical :: Bool
   }
   deriving (Show, Generic)
 
@@ -83,18 +86,21 @@ data Configuration = Configuration
   deriving (Show, Generic)
 
 instance FromJSON ConfigController
+
 instance FromJSON Configuration
 
-parseConfigurationFile :: String -> IO (Either String [String])
+parseConfigurationFile :: String -> IO (Either String ([String], [String]))
 parseConfigurationFile filepath = do
   result <- decodeFileEither filepath
   case result of
     Left err -> return $ Left $ "Failed to parse YAML: " ++ show err
     Right config -> do
-      let controllerNames = concatMap (map name . KM.elems) (controllers config)
-          inputTopics = map ("fsm/input/" ++) controllerNames
-      return $ Right inputTopics
-  
+      let allControllers = concatMap KM.elems (controllers config)
+          allInputTopics = map ("fsm/input/" ++) (map name allControllers)
+          requiredControllers = filter critical allControllers
+          requiredInputTopics = map ("fsm/input/" ++) (map name requiredControllers)
+      return $ Right (allInputTopics, requiredInputTopics)
+
 createMqttConfigFromFile :: String -> IO MqttConfig
 createMqttConfigFromFile filepath = do
   brokerVal <- getEnvVarValue "MQTT_BROKER_HOST"
@@ -106,16 +112,18 @@ createMqttConfigFromFile filepath = do
       port = maybe (-9999) readInt portVal
       from_env_topic = fromMaybe "NOT FOUND" from_env_topicVal
       to_env_topic = fromMaybe "NOT FOUND" to_env_topicVal
-      input_topics = case configResult of
-        Right topics -> topics
+      (input_topics, required_topics) = case configResult of
+        Right (all_topics, req_topics) -> (all_topics, req_topics)
         Left err -> error $ "Failed to parse configuration: " ++ err
-  return MqttConfig {
-    host = broker,
-    port = port,
-    from_env_collection_topic = from_env_topic,
-    to_env_collection_topic = to_env_topic,
-    input_topics = input_topics
-  }
+  return
+    MqttConfig
+      { host = broker,
+        port = port,
+        from_env_collection_topic = from_env_topic,
+        to_env_collection_topic = to_env_topic,
+        input_topics = input_topics,
+        required_input_topics = required_topics
+      }
   where
     readInt :: String -> Integer
     readInt s = case reads s of
@@ -143,7 +151,7 @@ combineJsons :: [String] -> String
 combineJsons msgs =
   let objects = mapMaybe (decode . B.pack) msgs :: [KM.KeyMap Data.Aeson.Value]
       merged = foldr KM.union KM.empty objects
-  in B.unpack (encode merged)
+   in B.unpack (encode merged)
 
 mqttCollector :: IO ()
 mqttCollector = do
@@ -151,12 +159,18 @@ mqttCollector = do
   let brokerUriStr = host mqttConfigVals ++ ":" ++ show (port mqttConfigVals)
       maybeUri = parseURI brokerUriStr
       inputTopics = input_topics mqttConfigVals
-  print inputTopics --TODO delete
+      requiredTopics = required_input_topics mqttConfigVals
+  print inputTopics -- TODO delete
+  print ("Required topics: " ++ show requiredTopics) -- TODO delete
   case maybeUri of
     Just uri -> do
       stopSignal <- newEmptyMVar
       mqttConnection <- connectURI mqttConfig uri
       chans <- startMqttListeners mqttConfigVals inputTopics stopSignal
+
+      -- Track which required topics have sent at least one message
+      receivedRequiredTopics <- newTVarIO Set.empty
+
       let loop lasts = do
             msgs <- mapM (atomically . tryReadTBQueue) chans
             let newLasts = zipWith (flip fromMaybe) msgs lasts
@@ -165,10 +179,36 @@ mqttCollector = do
             if any (\msg -> "QUIT" `isPrefixOf` msg) newLasts
               then return ()
               else do
-                threadDelay 20000 --Microseconds TODO: for testing use 1 second or so
+                threadDelay 20000 -- Microseconds TODO: for testing use 1 second or so
                 loop newLasts
-      loop (replicate (length chans) "")
+
+      let waitForRequiredDevices lasts = do
+            msgs <- mapM (atomically . tryReadTBQueue) chans
+            let newLasts = zipWith (flip fromMaybe) msgs lasts
+                -- Check which topics have received messages (non-empty strings)
+                topicsWithMessages = [topic | (topic, msg) <- zip inputTopics newLasts, msg /= ""]
+                requiredTopicsWithMessages = filter (`elem` requiredTopics) topicsWithMessages
+
+            -- Update the set of received required topics
+            atomically $ do
+              received <- readTVar receivedRequiredTopics
+              let updatedReceived = foldr Set.insert received requiredTopicsWithMessages
+              writeTVar receivedRequiredTopics updatedReceived
+
+            -- Check if all required topics have sent at least one message
+            currentReceived <- readTVarIO receivedRequiredTopics
+            let allRequiredReceived = all (`Set.member` currentReceived) requiredTopics
+
+            if allRequiredReceived || null requiredTopics
+              then do
+                putStrLn "All required input devices have sent at least one message. Starting main loop..."
+                loop newLasts
+              else do
+                -- putStrLn $ "Waiting for required devices. Received: " ++ show (Set.toList currentReceived) ++ ", Required: " ++ show requiredTopics
+                threadDelay 100000 -- 100ms
+                waitForRequiredDevices newLasts
+
+      waitForRequiredDevices (replicate (length chans) "")
       normalDisconnect mqttConnection
       putMVar stopSignal ()
     Nothing -> error $ "Invalid broker URI: " ++ brokerUriStr
-

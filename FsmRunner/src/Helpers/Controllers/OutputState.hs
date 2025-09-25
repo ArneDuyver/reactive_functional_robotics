@@ -13,15 +13,16 @@ import Data.Char
 import Data.Maybe (fromMaybe)
 import Data.Text (pack)
 
-data SimpleOne = SimpleOne
-  { actuatorOne :: Integer
+data Turtlebot = Turtlebot
+  { motorLeft :: Integer
+  , motorRight :: Integer
   } deriving (Show, Eq, Generic)
 
-instance ToJSON SimpleOne
+instance ToJSON Turtlebot
 
 data OutputData = OutputData
   { 
-    simpleOne :: SimpleOne,
+    turtlebot :: Turtlebot,
     state :: String
   }
   deriving (Show, Generic)

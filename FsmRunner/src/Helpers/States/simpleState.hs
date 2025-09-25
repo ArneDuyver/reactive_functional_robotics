@@ -5,7 +5,7 @@ module Helpers.States.SimpleState where
 import Control.Concurrent
 import FRP.Yampa
 import Helpers.YampaHelper
-import Helpers.Controllers.SimpleOne
+import Helpers.Controllers.Turtlebot
 import Helpers.Controllers.SimpleTwo
 import Helpers.Controllers.OutputState
 
@@ -13,20 +13,20 @@ import Helpers.Controllers.OutputState
 simpleStateSF :: SF String OutputState
 simpleStateSF = proc inputStr -> do
   -- Decode inputs for string
-  let (simpleOne, simpleOneErrFlag, simpleOneDebugMsg) = decodeSimpleOneState inputStr
+  let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState inputStr
 
   -- Create default types for Output
-  let simpleOneOut = SimpleOne { actuatorOne = 0 }
+  let turtlebotOut = Turtlebot { motorLeft = 0, motorRight = 0 }
 
     
   -- #### Control logic CHANGE THE DEFAULT OUTPUT VALUES TO THE DESIRED VALUE ####
-
+  let turtlebotOut = Turtlebot { motorLeft = 3, motorRight = 3 }
   -- #### END: Control logic ####
 
   -- Create OutputData with state name
-  let outputData = OutputData { simpleOne = simpleOneOut, state = "Simple" }
+  let outputData = OutputData { turtlebot = turtlebotOut, state = "Simple" }
   -- Create the error string
-  let (errFlag, debugMsg) = createErrFlagAndDebugMsg [ ("simpleOne", simpleOneErrFlag, simpleOneDebugMsg) ]
+  let (errFlag, debugMsg) = createErrFlagAndDebugMsg [ ("turtlebot", turtlebotErrFlag, turtlebotDebugMsg) ]
   -- Add your own values for debugging
   let specialDebugString = if errFlag then "DEBUG:: " ++ debugMsg else "STATE: simple :: "
   -- To stop simulation
@@ -41,5 +41,6 @@ simpleStateSF = proc inputStr -> do
 
 analyzerSimpleState :: SF (String, OutputState) (Event (String))
 analyzerSimpleState = proc (sfInput, sfOutput) -> do
-  e <- edgeTag "newStateName" -< True 
+  timeAfter <- time -< ()
+  e <- edgeTag "endState" -< timeAfter >= 15
   returnA -< e
