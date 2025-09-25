@@ -12,8 +12,9 @@ import InputBuilder qualified as IB
 import MixedBuilder qualified as MB
 import OutputBuilder qualified as OB
 import RfrUtilities (capitalize)
-import System.Directory (createDirectoryIfMissing)
+import System.Directory (createDirectoryIfMissing, listDirectory, removeFile)
 import System.Environment (getArgs)
+import System.FilePath (takeExtension, (</>))
 import Text.Mustache qualified as Mustache
 import Text.XML.Light
 import Text.XML.Light.Output (showElement)
@@ -391,9 +392,20 @@ writeFSMHtmlFile states = do
           ]
   writeFile "FsmRunner/src/fsm.html" htmlContent
 
+-- Clean up States directory (except .bk files)
+cleanStatesDirectory :: IO ()
+cleanStatesDirectory = do
+  let outDir = "FsmRunner/src/Helpers/States"
+  createDirectoryIfMissing True outDir
+  files <- listDirectory outDir
+  let filesToDelete = filter (\f -> takeExtension f /= ".bk") files
+  mapM_ (\f -> removeFile (outDir </> f)) filesToDelete
+  putStrLn $ "Cleaned States directory, preserved " ++ show (length files - length filesToDelete) ++ " .bk files"
+
 main :: [String] -> [IB.RawControllerInputState] -> [OB.RawControllerOutputState] -> [State] -> IO ()
 main controllerNames controllers outputControllers states = do
   let stateNames = map name states
+  cleanStatesDirectory
   mapM_ (writeStateFile controllerNames controllers outputControllers) states
   writeErrorStateFile controllerNames controllers outputControllers
   writeControllogicFile controllerNames controllers outputControllers states

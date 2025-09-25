@@ -13,8 +13,8 @@ import Data.Text.IO qualified as TIO
 import Data.Vector qualified as V
 import Data.Yaml qualified as Yaml
 import RfrUtilities (capitalize)
-import System.Directory (createDirectoryIfMissing)
-import System.FilePath ((</>))
+import System.Directory (createDirectoryIfMissing, listDirectory, removeFile)
+import System.FilePath (takeExtension, (</>))
 import Text.Mustache qualified as Mustache
 
 -- Intermediate representation for parsing
@@ -172,5 +172,17 @@ generateController controller = do
     defaultValueToString DefaultNull = "\"\""
     defaultValueToString DefaultInvalid = "\"\""
 
+-- Clean up Controllers directory (except .bk files) - only done once at the beginning
+cleanControllersDirectory :: IO ()
+cleanControllersDirectory = do
+  let outDir = "FsmRunner/src/Helpers/Controllers"
+  createDirectoryIfMissing True outDir
+  files <- listDirectory outDir
+  let filesToDelete = filter (\f -> takeExtension f /= ".bk") files
+  mapM_ (\f -> removeFile (outDir </> f)) filesToDelete
+  putStrLn $ "Cleaned Controllers directory, preserved " ++ show (length files - length filesToDelete) ++ " .bk files"
+
 main :: [RawControllerInputState] -> IO ()
-main rawControllers = mapM_ generateController rawControllers
+main rawControllers = do
+  cleanControllersDirectory
+  mapM_ generateController rawControllers

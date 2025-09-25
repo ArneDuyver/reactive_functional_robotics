@@ -1,16 +1,4 @@
-{-# Limport Data.Aeson (Value (..))
-import Data.Aeson qualified as Aeson
-import Data.Aeson.KeyMap qualified as KM
-import Data.List (intercalate)
-import Data.Scientific qualified as Scientific
-import Data.Text qualified as T
-import Data.Text.IO qualified as TIO
-import Data.Vector qualified as V
-import Data.Yaml qualified as Yaml
-import RfrUtilities (capitalize)
-import System.Directory (createDirectoryIfMissing)
-import System.FilePath ((</>))
-import Text.Mustache qualified as MustachetQualifiedPost #-}
+{-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module OutputBuilder where
