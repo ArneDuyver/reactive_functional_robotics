@@ -1,16 +1,16 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Main where
 
-import qualified InputBuilder as IB
-import qualified FsmBuilder as FB
-import qualified OutputBuilder as OB
-
-import qualified Data.Yaml as Yaml
-import Data.Aeson (Value(..))
-import qualified Data.Aeson.KeyMap as KM
-import qualified Data.Vector as V
+import Data.Aeson (Value (..))
+import Data.Aeson.KeyMap qualified as KM
+import Data.Vector qualified as V
+import Data.Yaml qualified as Yaml
+import FsmBuilder qualified as FB
+import GraphBuilder qualified as GB
+import InputBuilder qualified as IB
+import OutputBuilder qualified as OB
 
 -- Extract controllers from YAML file
 extractControllers :: FilePath -> IO [IB.RawControllerInputState]
@@ -53,25 +53,26 @@ extractControllerOutputs configPath = do
         return []
 
 main :: IO ()
-main = do 
+main = do
   -- inputs
   controllers <- extractControllers "./config/configuration.yml"
-  print controllers  -- Print the parsed controllers for debugging
+  print controllers -- Print the parsed controllers for debugging
   IB.main controllers
-  
+
   -- outputs
   controllerOutputs <- extractControllerOutputs "./config/configuration.yml"
-  print controllerOutputs  -- Print the parsed controller outputs for debugging
+  print controllerOutputs -- Print the parsed controller outputs for debugging
   OB.main controllerOutputs
-  
+
   -- Extract controller names for FSM builder
   let controllerNames = map IB.rawControllerName controllers ++ ["OutputState"]
-  
+
   -- fsm states
   content <- readFile "./config/fsm.xml"
   let states = FB.parseXml content
   FB.main controllerNames controllers controllerOutputs states
-  
-  putStrLn "All files generated successfully."
 
-  
+  -- generate mermaid graph
+  GB.main states
+
+  putStrLn "All files generated successfully."

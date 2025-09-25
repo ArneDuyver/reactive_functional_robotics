@@ -1,7 +1,7 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module FsmBuilder where
+module FsmBuilder (State (..), parseXml, main) where
 
 import Data.Aeson qualified as Aeson
 import Data.Char (toLower, toUpper)

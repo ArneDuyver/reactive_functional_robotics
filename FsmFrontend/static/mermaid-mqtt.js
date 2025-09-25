@@ -72,6 +72,17 @@ if (!document.getElementById("mermaid-style")) {
       stroke: #f57f17 !important;
       stroke-width: 3px;
     }
+    /* Error state styling */
+    .mermaid .errorState>rect {
+      fill: #ffebee !important;
+      stroke: #c62828 !important;
+      stroke-width: 2px !important;
+    }
+    .mermaid .error>rect {
+      fill: #ffcdd2 !important;
+      stroke: #d32f2f !important;
+      stroke-width: 3px !important;
+    }
   `;
   document.head.appendChild(style);
 }
@@ -81,23 +92,15 @@ if (!document.getElementById("mermaid-style")) {
 // ===============================
 
 function startApp() {
-  const brokerUrl = "ws://localhost:9001"; // TODO: move to .env or config
-  const topicHighlight = "test/tosim";
+  const brokerUrl = "ws://localhost:9001";
+  const topicHighlight = "fsm/toenv";
 
   let diagramData = {
-    classes: ["WallFollow", "EnterOpening", "TurnRight", "TurnLeft", "ExitOpening", "End"],
-    associations: [
-      ["WallFollow", "EnterOpening"],
-      ["WallFollow", "End"],
-      ["EnterOpening", "TurnRight"],
-      ["EnterOpening", "TurnLeft"],
-      ["TurnRight", "ExitOpening"],
-      ["TurnLeft", "ExitOpening"],
-      ["ExitOpening", "WallFollow"],
-    ],
+    classes: ["Simple", "End", "Error"],
+    associations: [["Simple", "End"]],
   };
 
-  let activeClass = "WallFollow";
+  let activeClass = "Simple";
 
   // Connect to MQTT
   const client = mqtt.connect(brokerUrl);
@@ -113,12 +116,26 @@ function startApp() {
     try {
       const data = JSON.parse(message.toString());
       if (topic === topicHighlight) {
+        // Extract state from OutputState structure: data.outputData.state
         const newActiveClass = data.outputData && data.outputData.state ? data.outputData.state : null;
-        activeClass = diagramData.classes.includes(newActiveClass) ? newActiveClass : null;
+        console.log("[DEBUG] Received state:", newActiveClass);
+        
+        // Validate state exists in our diagram and update
+        if (newActiveClass && diagramData.classes.includes(newActiveClass)) {
+          activeClass = newActiveClass;
+          console.log("[DEBUG] Updated active state to:", activeClass);
+        } else {
+          console.log("[DEBUG] State not found in diagram classes:", newActiveClass);
+          // If invalid state received, default to Error state
+          activeClass = "Error";
+        }
         updateDiagram();
       }
     } catch (err) {
-      console.error("[DEBUG] Fout bij parsen:", err);
+      console.error("[DEBUG] Fout bij parsen van MQTT bericht:", err);
+      // On parsing error, set to Error state
+      activeClass = "Error";
+      updateDiagram();
     }
   });
 
@@ -130,9 +147,19 @@ function startApp() {
     let diagram = "graph LR\n";
     diagramData.classes.forEach((cls) => {
       if (cls === activeClass) {
-        diagram += `${cls}(["${cls}"]):::highlight\n`;
+        // Highlight the active state
+        if (cls === "Error") {
+          diagram += `${cls}(["${cls}"]):::error\n`;
+        } else {
+          diagram += `${cls}(["${cls}"]):::highlight\n`;
+        }
       } else {
-        diagram += `${cls}(${cls})\n`;
+        // Regular state display
+        if (cls === "Error") {
+          diagram += `${cls}([${cls}]):::errorState\n`;
+        } else {
+          diagram += `${cls}(${cls})\n`;
+        }
       }
     });
     diagramData.associations.forEach(([c1, c2]) => {

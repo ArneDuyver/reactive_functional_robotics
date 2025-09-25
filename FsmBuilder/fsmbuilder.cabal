@@ -24,7 +24,7 @@ executable fsmbuilder
                     , yaml
                     , vector
                     , scientific 
-    other-modules: InputBuilder, FsmBuilder, MixedBuilder, OutputBuilder
+    other-modules: InputBuilder, FsmBuilder, MixedBuilder, OutputBuilder, GraphBuilder
     hs-source-dirs:   src
     default-extensions: OverloadedStrings, ImportQualifiedPost
     default-language: Haskell2010
