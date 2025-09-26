@@ -116,26 +116,41 @@ function startApp() {
     try {
       const data = JSON.parse(message.toString());
       if (topic === topicHighlight) {
+        console.log(data)
         // Extract state from OutputState structure: data.outputData.state
         const newActiveClass = data.outputData && data.outputData.state ? data.outputData.state : null;
         console.log("[DEBUG] Received state:", newActiveClass);
+
+        let stateChanged = false;
         
         // Validate state exists in our diagram and update
         if (newActiveClass && diagramData.classes.includes(newActiveClass)) {
-          activeClass = newActiveClass;
-          console.log("[DEBUG] Updated active state to:", activeClass);
+          if (activeClass !== newActiveClass) {
+            activeClass = newActiveClass;
+            stateChanged = true;
+            console.log("[DEBUG] Updated active state to:", activeClass);
+          }
         } else {
           console.log("[DEBUG] State not found in diagram classes:", newActiveClass);
           // If invalid state received, default to Error state
-          activeClass = "Error";
+          if (activeClass !== "Error") {
+            activeClass = "Error";
+            stateChanged = true;
+          }
         }
-        updateDiagram();
+        
+        // Only redraw if state actually changed
+        if (stateChanged) {
+          updateDiagram();
+        }
       }
     } catch (err) {
       console.error("[DEBUG] Fout bij parsen van MQTT bericht:", err);
-      // On parsing error, set to Error state
-      activeClass = "Error";
-      updateDiagram();
+      // On parsing error, set to Error state only if not already in Error state
+      if (activeClass !== "Error") {
+        activeClass = "Error";
+        updateDiagram();
+      }
     }
   });
 

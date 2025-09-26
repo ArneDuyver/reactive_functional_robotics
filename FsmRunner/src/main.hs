@@ -28,8 +28,8 @@ main = do
     Nothing -> putStrLn "Error: Could not load MQTT configuration from ./config/.env"
     Just (host, port, fromTopic, toTopic) -> do
       let mqttBroker = host ++ ":" ++ port
-      let fromSimTopic = toTopic
-      let toSimTopic = fromTopic
+      let fromSimTopic = fromTopic
+      let toSimTopic = toTopic
       -- TODO CHECK ABOVE order is weird !!!!!
       
       eventChan <- newTBQueueIO 10 -- Create event queue for messages received by MQTT, capacity 10

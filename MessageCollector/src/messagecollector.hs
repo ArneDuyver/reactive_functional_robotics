@@ -175,7 +175,7 @@ mqttCollector = do
             msgs <- mapM (atomically . tryReadTBQueue) chans
             let newLasts = zipWith (flip fromMaybe) msgs lasts
                 combinedMsg = combineJsons newLasts
-            pubToTopic mqttConnection (to_env_collection_topic mqttConfigVals) combinedMsg
+            pubToTopic mqttConnection (from_env_collection_topic mqttConfigVals) combinedMsg
             if any (\msg -> "QUIT" `isPrefixOf` msg) newLasts
               then return ()
               else do
