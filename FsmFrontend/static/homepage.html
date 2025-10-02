@@ -16,8 +16,29 @@
             <!-- Threepenny buttons will be added here -->
         </div>
         
-        <div id="threepenny-display" class="display-area">
-            <!-- Threepenny display area will be added here -->
+        <div class="tabs-container">
+            <div class="tab-content">
+                <div id="threepenny-display-messagecollector" class="active tab-pane">
+                    <!-- Threepenny display used to display output of message collector-->
+                </div>
+                <div id="threepenny-display-runner" class="tab-pane">
+                    <!-- Threepenny display used to display output of runner-->
+                </div>
+                
+                <div id="threepenny-display-builder" class="tab-pane">
+                    <!-- Threepenny display used to display output of fsm builder-->
+                </div>
+                <div id="threepenny-display-simulation" class="tab-pane">
+                    <!-- Threepenny display used to display output of simulation-->
+                    Simulation output (A new button that runs the following command: python "C:\Users\Work\OneDrive - KU Leuven\Documents\PhD\Code\1_Research\1_turtlebot_copp_programs\main.py")
+                </div>
+            </div>
+            <div class="tab-buttons">
+                <button class="tab-btn active" data-tab="threepenny-display-messagecollector">Msg collector</button>
+                <button class="tab-btn " data-tab="threepenny-display-runner">FSM Runner</button>
+                <button class="tab-btn" data-tab="threepenny-display-builder">Builder</button>
+                <button class="tab-btn" data-tab="threepenny-display-simulation">Simulation</button>
+            </div>
         </div>
         
         <div class="mermaid-section">
@@ -28,5 +49,70 @@
     
     <!-- Load external JS file for Mermaid + MQTT -->
     <script src="/static/mermaid-mqtt.js"></script>
+    <script>
+        // Tab switching functionality with multiple initialization attempts
+        function setupTabs() {
+            console.log('Setting up tabs...');
+            const tabButtons = document.querySelectorAll('.tab-btn');
+            const tabPanes = document.querySelectorAll('.tab-pane');
+            
+            console.log('Found', tabButtons.length, 'tab buttons and', tabPanes.length, 'tab panes');
+            
+            if (tabButtons.length === 0 || tabPanes.length === 0) {
+                console.log('Tab elements not found yet, will retry...');
+                return false;
+            }
+            
+            tabButtons.forEach((button, index) => {
+                console.log('Setting up button', index, 'with data-tab:', button.getAttribute('data-tab'));
+                button.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    console.log('Tab clicked:', this.getAttribute('data-tab'));
+                    const targetTab = this.getAttribute('data-tab');
+                    
+                    // Remove active class from all buttons and panes
+                    tabButtons.forEach(btn => btn.classList.remove('active'));
+                    tabPanes.forEach(pane => pane.classList.remove('active'));
+                    
+                    // Add active class to clicked button and corresponding pane
+                    this.classList.add('active');
+                    const targetPane = document.getElementById(targetTab);
+                    if (targetPane) {
+                        targetPane.classList.add('active');
+                        console.log('Activated tab:', targetTab);
+                    } else {
+                        console.log('Target pane not found:', targetTab);
+                    }
+                });
+            });
+            
+            console.log('Tab setup completed successfully');
+            return true;
+        }
+        
+        // Try to setup immediately
+        console.log('Immediate tab setup attempt...');
+        setupTabs();
+        
+        // Also try when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, setting up tabs...');
+            setupTabs();
+        });
+        
+        // And try with a delay in case Threepenny modifies the DOM later
+        setTimeout(() => {
+            console.log('Delayed tab setup attempt...');
+            setupTabs();
+        }, 1000);
+        
+        // Update status time every second
+        setInterval(() => {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString();
+            const statusTime = document.getElementById('status-time');
+            if (statusTime) statusTime.textContent = timeStr;
+        }, 1000);
+    </script>
 </body>
 </html>

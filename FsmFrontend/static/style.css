@@ -119,3 +119,69 @@ body {
 #mermaid-container:not(.fade-in) { 
     opacity: 0; 
 }
+
+.tabs-container {
+    margin-bottom: 20px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    background-color: white;
+}
+
+.tab-content {
+    min-height: 150px;
+    padding: 20px;
+    background-color: #fafafa;
+    border-radius: 5px 5px 0 0;
+}
+
+.tab-pane {
+    display: none;
+}
+
+.tab-pane.active {
+    display: block;
+}
+
+.tab-pane h3 {
+    margin-top: 0;
+    color: #333;
+    border-bottom: 2px solid #2196F3;
+    padding-bottom: 5px;
+}
+
+.tab-buttons {
+    display: flex;
+    background-color: #f0f0f0;
+    border-radius: 0 0 5px 5px;
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    background-color: transparent;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: #666;
+    transition: all 0.3s ease;
+    border-right: 1px solid #ddd;
+}
+
+.tab-btn:last-child {
+    border-right: none;
+}
+
+.tab-btn:hover {
+    background-color: #e0e0e0;
+    color: #333;
+}
+
+.tab-btn.active {
+    background-color: #2196F3;
+    color: white;
+}
+
+.tab-btn.active:hover {
+    background-color: #1976D2;
+}

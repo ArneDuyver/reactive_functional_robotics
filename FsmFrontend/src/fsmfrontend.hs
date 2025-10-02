@@ -9,8 +9,14 @@ import Data.IORef
 import System.Exit (exitSuccess)
 import Control.Concurrent (forkIO, killThread, ThreadId, threadDelay)
 
+
+-- outputRef: Stores accumulated output lines from running processes
+-- PhRef: Reference to process handle for termination
+-- ThreadRef: Reference to the thread reading output
+-- handleRef: Reference to the stdout handle
+-- window: The Threepenny-UI window object for the web interface
 setup :: IORef [String] -> IORef (Maybe ProcessHandle) -> IORef (Maybe ThreadId) -> IORef (Maybe Handle) -> IORef (Maybe ProcessHandle) -> IORef (Maybe ThreadId) -> IORef (Maybe Handle) -> Window -> UI ()
-setup outputRef phRef threadRef handleRef mcPhRef mcThreadRef mcHandleRef window = do
+setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef mcHandleRef window = do
     return window # set title "Reactive Functional Robotics"
 
     -- Load the homepage.html file and set it as the body content
@@ -41,7 +47,7 @@ setup outputRef phRef threadRef handleRef mcPhRef mcThreadRef mcHandleRef window
         Nothing -> return ()
 
     -- Add display area to the display container
-    displayContainer <- getElementById window "threepenny-display"
+    displayContainer <- getElementById window "threepenny-display-runner"
     case displayContainer of
         Just container -> void $ element container #+ [element displayArea]
         Nothing -> return ()
@@ -61,14 +67,14 @@ setup outputRef phRef threadRef handleRef mcPhRef mcThreadRef mcHandleRef window
         liftIO $ forkIO $ do
             threadDelay 2000000 -- Wait 2 seconds for messageCollector to initialize
             runUI window $ void $ updateDisplay "Starting FsmRunner..."
-            runProcessWithLiveOutput outputRef phRef threadRef handleRef window "cabal run FsmRunner" (\lines -> void $ runUI window (updateDisplayHtml (unlines (map (\l -> "<div>" ++ l ++ "</div>") lines))))
+            runProcessWithLiveOutput outputRef runnerPhRef runnerThreadRef runnerhandleRef window "cabal run FsmRunner" (\lines -> void $ runUI window (updateDisplayHtml (unlines (map (\l -> "<div>" ++ l ++ "</div>") lines))))
         
         return ()
 
     on UI.click buildButton $ \_ -> do
         liftIO $ writeIORef outputRef []
         updateDisplay "Building FSM..."
-        liftIO $ runProcessWithLiveOutput outputRef phRef threadRef handleRef window "cabal run FsmBuilder" (\lines -> void $ runUI window (updateDisplayHtml (unlines (map (\l -> "<div>" ++ l ++ "</div>") lines))))
+        liftIO $ runProcessWithLiveOutput outputRef runnerPhRef runnerThreadRef runnerhandleRef window "cabal run FsmBuilder" (\lines -> void $ runUI window (updateDisplayHtml (unlines (map (\l -> "<div>" ++ l ++ "</div>") lines))))
         return ()
 
     on UI.click clearButton $ \_ -> do
@@ -80,9 +86,9 @@ setup outputRef phRef threadRef handleRef mcPhRef mcThreadRef mcHandleRef window
         -- Run cleanup in background thread to avoid blocking UI
         liftIO $ forkIO $ do
             -- Stop FsmRunner
-            mph <- readIORef phRef
-            mth <- readIORef threadRef
-            mh  <- readIORef handleRef
+            mph <- readIORef runnerPhRef
+            mth <- readIORef runnerThreadRef
+            mh  <- readIORef runnerhandleRef
             case mph of
               Just ph -> do
                 terminateProcess ph
@@ -94,9 +100,9 @@ setup outputRef phRef threadRef handleRef mcPhRef mcThreadRef mcHandleRef window
             case mth of
               Just tid -> killThread tid
               Nothing -> return ()
-            writeIORef phRef Nothing
-            writeIORef threadRef Nothing
-            writeIORef handleRef Nothing
+            writeIORef runnerPhRef Nothing
+            writeIORef runnerThreadRef Nothing
+            writeIORef runnerhandleRef Nothing
             
             -- Stop messageCollector
             mcph <- readIORef mcPhRef
@@ -121,31 +127,13 @@ setup outputRef phRef threadRef handleRef mcPhRef mcThreadRef mcHandleRef window
             exitSuccess
         return ()
 
--- Helper function to extract body content from HTML (no longer used but kept for compatibility)
-extractBodyContent :: String -> String
-extractBodyContent html = 
-    let bodyStart = "<body>"
-        bodyEnd = "</body>"
-        startIndex = maybe 0 (+length bodyStart) (findSubstring bodyStart html)
-        endIndex = maybe (length html) id (findSubstring bodyEnd html)
-    in take (endIndex - startIndex) (drop startIndex html)
-
--- Simple substring finder
-findSubstring :: String -> String -> Maybe Int
-findSubstring needle haystack = findSubstringHelper needle haystack 0
-  where
-    findSubstringHelper _ [] _ = Nothing
-    findSubstringHelper needle haystack@(_:rest) index
-        | take (length needle) haystack == needle = Just index
-        | otherwise = findSubstringHelper needle rest (index + 1)
-
 -- Run process silently in background (no UI output)
 runProcessSilent :: IORef (Maybe ProcessHandle) -> IORef (Maybe ThreadId) -> IORef (Maybe Handle) -> String -> IO ()
-runProcessSilent phRef threadRef handleRef cmd = do
+runProcessSilent runnerPhRef runnerThreadRef runnerhandleRef cmd = do
     let proc = shell cmd
     (_, Just hout, _, ph) <- createProcess proc { std_out = CreatePipe }
-    writeIORef phRef (Just ph)
-    writeIORef handleRef (Just hout)
+    writeIORef runnerPhRef (Just ph)
+    writeIORef runnerhandleRef (Just hout)
     hSetBuffering hout LineBuffering
     tid <- forkIO $ do
       let loop = do
@@ -157,19 +145,19 @@ runProcessSilent phRef threadRef handleRef cmd = do
                 loop
       loop
       _ <- waitForProcess ph
-      writeIORef phRef Nothing
-      writeIORef threadRef Nothing
-      writeIORef handleRef Nothing
+      writeIORef runnerPhRef Nothing
+      writeIORef runnerThreadRef Nothing
+      writeIORef runnerhandleRef Nothing
       return ()
-    writeIORef threadRef (Just tid)
+    writeIORef runnerThreadRef (Just tid)
     return ()
 
 runProcessWithLiveOutput :: IORef [String] -> IORef (Maybe ProcessHandle) -> IORef (Maybe ThreadId) -> IORef (Maybe Handle) -> Window -> String -> ([String] -> IO ()) -> IO ()
-runProcessWithLiveOutput outputRef phRef threadRef handleRef window cmd onLines = do
+runProcessWithLiveOutput outputRef runnerPhRef runnerThreadRef runnerhandleRef window cmd onLines = do
     let proc = shell cmd
     (_, Just hout, _, ph) <- createProcess proc { std_out = CreatePipe }
-    writeIORef phRef (Just ph)
-    writeIORef handleRef (Just hout)
+    writeIORef runnerPhRef (Just ph)
+    writeIORef runnerhandleRef (Just hout)
     hSetBuffering hout LineBuffering
     tid <- forkIO $ do
       let loop = do
@@ -187,20 +175,20 @@ runProcessWithLiveOutput outputRef phRef threadRef handleRef window cmd onLines 
       modifyIORef' outputRef (\ls -> ls ++ ["DONE"])
       lines <- readIORef outputRef
       onLines lines
-      writeIORef phRef Nothing
-      writeIORef threadRef Nothing
-      writeIORef handleRef Nothing
+      writeIORef runnerPhRef Nothing
+      writeIORef runnerThreadRef Nothing
+      writeIORef runnerhandleRef Nothing
       return ()
-    writeIORef threadRef (Just tid)
+    writeIORef runnerThreadRef (Just tid)
     return ()
 
 startFrontend :: IO ()
 startFrontend = do
   outputRef <- newIORef []
-  phRef <- newIORef Nothing
-  threadRef <- newIORef Nothing
-  handleRef <- newIORef Nothing
+  runnerPhRef <- newIORef Nothing
+  runnerThreadRef <- newIORef Nothing
+  runnerhandleRef <- newIORef Nothing
   mcPhRef <- newIORef Nothing
   mcThreadRef <- newIORef Nothing
   mcHandleRef <- newIORef Nothing
-  startGUI defaultConfig { jsStatic = Just "./FsmFrontend/static" } (setup outputRef phRef threadRef handleRef mcPhRef mcThreadRef mcHandleRef)
+  startGUI defaultConfig { jsStatic = Just "./FsmFrontend/static" } (setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef mcHandleRef)
