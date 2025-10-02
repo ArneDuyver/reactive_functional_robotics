@@ -1,6 +1,6 @@
 {-# LANGUAGE Arrows #-}
 
-module Helpers.States.EndState where
+module Helpers.States.SimpleState where
 
 import Control.Concurrent
 import FRP.Yampa
@@ -13,9 +13,8 @@ import Helpers.Controllers.OutputState
 
 -- State behavior logic function - modify this to implement your state behavior
 stateBehaviour :: TurtlebotState -> Turtlebot
-stateBehaviour turtlebot = turtlebotOut
+stateBehaviour turtlebotState = defaultTurtlebot { motorLeft = 3.0, motorRight = 3.0 }
   -- Create default types for Output
-  where turtlebotOut = defaultTurtlebot
       -- Add your control logic here using the input parameters:
             -- turtlebotOut' = turtlebotOut { 
       --   motorLeft = if (value turtlebot) > 0.5 then 1.0 else 0.0,
@@ -31,7 +30,7 @@ stateTransition turtlebot =
   -- Add your transition logic here using the input parameters:
   -- Return (shouldSwitch, targetStateName)
   let shouldSwitch = False  -- Change this condition based on your logic
-      targetState = "newStateName"  -- Target state name
+      targetState = "endState"  -- Target state name
       -- Example logic based on sensor readings:
       -- shouldSwitch = (value turtlebot) > 0.8  -- Switch when sensor reading is high
       -- targetState = if (value turtlebot) > 0.8 then "FastState" 
@@ -64,8 +63,8 @@ stateTransition turtlebot =
 
 
 
-endStateSF :: SF String OutputState
-endStateSF = proc inputStr -> do
+simpleStateSF :: SF String OutputState
+simpleStateSF = proc inputStr -> do
   -- Decode inputs for string
   let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState inputStr
 
@@ -73,11 +72,11 @@ endStateSF = proc inputStr -> do
   let turtlebotOut = stateBehaviour turtlebot
  
   -- Create OutputData with state name
-  let outputData = OutputData { turtlebot = turtlebotOut, state = "End" }
+  let outputData = OutputData { turtlebot = turtlebotOut, state = "Simple" }
   -- Create the error string
   let (errFlag, debugMsg) = createErrFlagAndDebugMsg [ ("turtlebot", turtlebotErrFlag, turtlebotDebugMsg) ]
   -- Add your own values for debugging
-  let specialDebugString = if errFlag then "DEBUG:: " ++ debugMsg else "STATE: end :: "
+  let specialDebugString = if errFlag then "DEBUG:: " ++ debugMsg else "STATE: simple :: "
   -- To stop simulation
   let debugString
         | errFlag = "STOPSIM " ++ specialDebugString
@@ -88,15 +87,15 @@ endStateSF = proc inputStr -> do
 
   returnA -< outputState
 
-analyzerEndState :: SF (String, OutputState) (Event (String))
-analyzerEndState = proc (sfInput, sfOutput) -> do
+analyzerSimpleState :: SF (String, OutputState) (Event (String))
+analyzerSimpleState = proc (sfInput, sfOutput) -> do
   -- Decode inputs for analysis
   let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState sfInput
 
 
   -- Determine next state using transition logic
-  let (shouldSwitch, targetStateName) = stateTransition turtlebot
+  let (shouldSwitch, targetState) = stateTransition turtlebot
   
   t <- time -< () 
-  e <- edgeTag "newStateName" -< t > 4 
+  e <- edgeTag "endState" -< t > 4 
   returnA -< e

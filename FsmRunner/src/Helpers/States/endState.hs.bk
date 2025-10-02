@@ -95,8 +95,8 @@ analyzerEndState = proc (sfInput, sfOutput) -> do
 
 
   -- Determine next state using transition logic
-  let (shouldSwitch, targetStateName) = stateTransition turtlebot
+  let (shouldSwitch, targetState) = stateTransition turtlebot
   
   t <- time -< () 
-  e <- edgeTag "newStateName" -< t > 4 
+  e <- edgeTag "endState" -< True
   returnA -< e

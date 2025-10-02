@@ -81,5 +81,5 @@ analyzer{{stateName}}State = proc (sfInput, sfOutput) -> do
   let (shouldSwitch, targetStateName) = stateTransition {{input_variables_analyzer}}
   
   t <- time -< () 
-  e <- edgeTag targetStateName -< shouldSwitch && t > 4 
+  e <- edgeTag "newStateName" -< t > 4 
   returnA -< e

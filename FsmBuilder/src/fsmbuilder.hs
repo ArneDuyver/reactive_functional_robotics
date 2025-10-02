@@ -172,8 +172,8 @@ generateInputVariables controllers =
 generateOutputType :: [OB.RawControllerOutputState] -> String
 generateOutputType outputControllers =
   case outputControllers of
-    [controller] -> capitalize (OB.rawOutputControllerName controller) ++ "State"
-    _ -> "TurtlebotState" -- Default fallback
+    [controller] -> capitalize (OB.rawOutputControllerName controller)  -- Remove "State" suffix
+    _ -> "Turtlebot" -- Default fallback to actual output type
 
 -- Generate output variable name
 generateOutputVariable :: [OB.RawControllerOutputState] -> String

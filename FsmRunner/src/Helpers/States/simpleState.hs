@@ -13,8 +13,9 @@ import Helpers.Controllers.OutputState
 
 -- State behavior logic function - modify this to implement your state behavior
 stateBehaviour :: TurtlebotState -> Turtlebot
-stateBehaviour turtlebotState = defaultTurtlebot { motorLeft = 3.0, motorRight = 3.0 }
+stateBehaviour turtlebot = turtlebotOut
   -- Create default types for Output
+  where turtlebotOut = defaultTurtlebot
       -- Add your control logic here using the input parameters:
             -- turtlebotOut' = turtlebotOut { 
       --   motorLeft = if (value turtlebot) > 0.5 then 1.0 else 0.0,
@@ -30,7 +31,7 @@ stateTransition turtlebot =
   -- Add your transition logic here using the input parameters:
   -- Return (shouldSwitch, targetStateName)
   let shouldSwitch = False  -- Change this condition based on your logic
-      targetState = "endState"  -- Target state name
+      targetState = "newStateName"  -- Target state name
       -- Example logic based on sensor readings:
       -- shouldSwitch = (value turtlebot) > 0.8  -- Switch when sensor reading is high
       -- targetState = if (value turtlebot) > 0.8 then "FastState" 
@@ -94,8 +95,8 @@ analyzerSimpleState = proc (sfInput, sfOutput) -> do
 
 
   -- Determine next state using transition logic
-  let (shouldSwitch, targetState) = stateTransition turtlebot
+  let (shouldSwitch, targetStateName) = stateTransition turtlebot
   
   t <- time -< () 
-  e <- edgeTag "endState" -< t > 4 
+  e <- edgeTag "newStateName" -< t > 4 
   returnA -< e
