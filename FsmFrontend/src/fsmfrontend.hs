@@ -27,62 +27,116 @@ setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef 
     liftIO $ threadDelay 500000 -- 500ms to ensure DOM is loaded
 
     -- Create Threepenny buttons with proper CSS classes and IDs
+    collectButton <- UI.button # set text "Collect" 
+                              # set (attr "class") "btn btn-process"
+                              # set (attr "id") "collect-btn"
     runButton <- UI.button # set text "Run" 
-                          # set (attr "class") "btn btn-run"
+                          # set (attr "class") "btn btn-process"
+                          # set (attr "id") "run-btn"
     buildButton <- UI.button # set text "Build"
-                            # set (attr "class") "btn btn-build"
+                            # set (attr "class") "btn btn-process"
+                            # set (attr "id") "build-btn"
+    simulationButton <- UI.button # set text "Simulation"
+                                 # set (attr "class") "btn btn-process"
+                                 # set (attr "id") "simulation-btn"
     clearButton <- UI.button # set text "Clear"
                             # set (attr "class") "btn btn-clear"
     quitButton <- UI.button # set text "Quit"
                            # set (attr "class") "btn btn-quit"
 
-    -- Create Threepenny display area
-    displayArea <- UI.div # set (attr "class") "display-area"
-                          # set text "Press a button to start ..."
+    -- Create Threepenny display areas for each tab
+    collectDisplayArea <- UI.div # set (attr "class") "display-area"
+                                # set text "Press Collect to start message collector..."
+    runDisplayArea <- UI.div # set (attr "class") "display-area"
+                            # set text "Press Run to start FSM Runner..."
+    buildDisplayArea <- UI.div # set (attr "class") "display-area"
+                              # set text "Press Build to start FSM Builder..."
+    simulationDisplayArea <- UI.div # set (attr "class") "display-area"
+                                   # set text "Press Simulation to start simulation..."
 
     -- Add buttons to the button container
     buttonContainer <- getElementById window "threepenny-buttons"
     case buttonContainer of
-        Just container -> void $ element container #+ [element runButton, element buildButton, element clearButton, element quitButton]
+        Just container -> void $ element container #+ [element collectButton, element runButton, element buildButton, element simulationButton, element clearButton, element quitButton]
         Nothing -> return ()
 
-    -- Add display area to the display container
-    displayContainer <- getElementById window "threepenny-display-runner"
-    case displayContainer of
-        Just container -> void $ element container #+ [element displayArea]
+    -- Add display areas to their corresponding containers
+    collectContainer <- getElementById window "threepenny-display-messagecollector"
+    case collectContainer of
+        Just container -> void $ element container #+ [element collectDisplayArea]
+        Nothing -> return ()
+        
+    runContainer <- getElementById window "threepenny-display-runner"
+    case runContainer of
+        Just container -> void $ element container #+ [element runDisplayArea]
+        Nothing -> return ()
+        
+    buildContainer <- getElementById window "threepenny-display-builder"
+    case buildContainer of
+        Just container -> void $ element container #+ [element buildDisplayArea]
+        Nothing -> return ()
+        
+    simulationContainer <- getElementById window "threepenny-display-simulation"
+    case simulationContainer of
+        Just container -> void $ element container #+ [element simulationDisplayArea]
         Nothing -> return ()
 
-    -- Helper functions to update display (now using our Threepenny display area)
-    let updateDisplay txt = element displayArea # set text txt
-    let updateDisplayHtml htmlText = element displayArea # set html htmlText
-    -- Set up the actual Haskell event handlers
+    -- Helper functions to update displays and button states
+    let updateCollectDisplay txt = element collectDisplayArea # set text txt
+    let updateRunDisplay txt = element runDisplayArea # set text txt
+    let updateBuildDisplay txt = element buildDisplayArea # set text txt
+    let updateSimulationDisplay txt = element simulationDisplayArea # set text txt
+    let updateCollectDisplayHtml htmlText = element collectDisplayArea # set html htmlText
+    let updateRunDisplayHtml htmlText = element runDisplayArea # set html htmlText
+    let updateBuildDisplayHtml htmlText = element buildDisplayArea # set html htmlText
+    let updateSimulationDisplayHtml htmlText = element simulationDisplayArea # set html htmlText
+    
+    let setButtonActive btnElement = element btnElement # set (attr "class") "btn btn-process active"
+    let setButtonInactive btnElement = element btnElement # set (attr "class") "btn btn-process"
+    
+    -- Set up the event handlers for each button
+    on UI.click collectButton $ \_ -> do
+        setButtonActive collectButton
+        updateCollectDisplay "Starting messageCollector..."
+        liftIO $ runProcessWithLiveOutput outputRef mcPhRef mcThreadRef mcHandleRef window "cabal run messageCollector" 
+            (\lines -> void $ runUI window (updateCollectDisplayHtml (unlines (map (\l -> "<div>" ++ l ++ "</div>") lines))))
+        return ()
+
     on UI.click runButton $ \_ -> do
-        liftIO $ writeIORef outputRef []
-        updateDisplay "Starting messageCollector..."
-        
-        -- First start messageCollector (background process, no UI output)
-        liftIO $ runProcessSilent mcPhRef mcThreadRef mcHandleRef "cabal run messageCollector"
-        
-        -- Wait a moment for messageCollector to start, then start FsmRunner with live output
-        liftIO $ forkIO $ do
-            threadDelay 2000000 -- Wait 2 seconds for messageCollector to initialize
-            runUI window $ void $ updateDisplay "Starting FsmRunner..."
-            runProcessWithLiveOutput outputRef runnerPhRef runnerThreadRef runnerhandleRef window "cabal run FsmRunner" (\lines -> void $ runUI window (updateDisplayHtml (unlines (map (\l -> "<div>" ++ l ++ "</div>") lines))))
-        
+        setButtonActive runButton
+        updateRunDisplay "Starting FsmRunner..."
+        liftIO $ runProcessWithLiveOutput outputRef runnerPhRef runnerThreadRef runnerhandleRef window "cabal run FsmRunner" 
+            (\lines -> void $ runUI window (updateRunDisplayHtml (unlines (map (\l -> "<div>" ++ l ++ "</div>") lines))))
         return ()
 
     on UI.click buildButton $ \_ -> do
-        liftIO $ writeIORef outputRef []
-        updateDisplay "Building FSM..."
-        liftIO $ runProcessWithLiveOutput outputRef runnerPhRef runnerThreadRef runnerhandleRef window "cabal run FsmBuilder" (\lines -> void $ runUI window (updateDisplayHtml (unlines (map (\l -> "<div>" ++ l ++ "</div>") lines))))
+        setButtonActive buildButton
+        updateBuildDisplay "Building FSM..."
+        liftIO $ runProcessWithLiveOutput outputRef runnerPhRef runnerThreadRef runnerhandleRef window "cabal run FsmBuilder" 
+            (\lines -> void $ runUI window (updateBuildDisplayHtml (unlines (map (\l -> "<div>" ++ l ++ "</div>") lines))))
+        return ()
+
+    on UI.click simulationButton $ \_ -> do
+        setButtonActive simulationButton
+        updateSimulationDisplay "Starting simulation..."
+        liftIO $ runProcessWithLiveOutput outputRef runnerPhRef runnerThreadRef runnerhandleRef window "python \"C:\\Users\\Work\\OneDrive - KU Leuven\\Documents\\PhD\\Code\\1_Research\\1_turtlebot_copp_programs\\main.py\"" 
+            (\lines -> void $ runUI window (updateSimulationDisplayHtml (unlines (map (\l -> "<div>" ++ l ++ "</div>") lines))))
         return ()
 
     on UI.click clearButton $ \_ -> do
         liftIO $ writeIORef outputRef []
-        void $ updateDisplay ""
+        void $ updateCollectDisplay ""
+        void $ updateRunDisplay ""
+        void $ updateBuildDisplay ""
+        void $ updateSimulationDisplay ""
 
     on UI.click quitButton $ \_ -> do
-        updateDisplay "Stopping processes..."
+        updateCollectDisplay "Stopping processes..."
+        -- Reset all button states to inactive
+        setButtonInactive collectButton
+        setButtonInactive runButton
+        setButtonInactive buildButton
+        setButtonInactive simulationButton
         -- Run cleanup in background thread to avoid blocking UI
         liftIO $ forkIO $ do
             -- Stop FsmRunner

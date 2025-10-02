@@ -38,22 +38,25 @@ body {
     transition: background-color 0.3s;
 }
 
-.btn-run {
+.btn-process {
+    background-color: white;
+    color: #333;
+    border: 2px solid #ddd;
+}
+
+.btn-process:hover {
+    background-color: #f5f5f5;
+    border-color: #bbb;
+}
+
+.btn-process.active {
     background-color: #4CAF50;
     color: white;
+    border-color: #45a049;
 }
 
-.btn-run:hover {
+.btn-process.active:hover {
     background-color: #45a049;
-}
-
-.btn-build {
-    background-color: #2196F3;
-    color: white;
-}
-
-.btn-build:hover {
-    background-color: #1976D2;
 }
 
 .btn-clear {
