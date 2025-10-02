@@ -15,8 +15,8 @@ import Control.Concurrent (forkIO, killThread, ThreadId, threadDelay)
 -- ThreadRef: Reference to the thread reading output
 -- handleRef: Reference to the stdout handle
 -- window: The Threepenny-UI window object for the web interface
-setup :: IORef [String] -> IORef (Maybe ProcessHandle) -> IORef (Maybe ThreadId) -> IORef (Maybe Handle) -> IORef (Maybe ProcessHandle) -> IORef (Maybe ThreadId) -> IORef (Maybe Handle) -> Window -> UI ()
-setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef mcHandleRef window = do
+setup :: IORef [String] -> IORef (Maybe ProcessHandle) -> IORef (Maybe ThreadId) -> IORef (Maybe Handle) -> IORef (Maybe ProcessHandle) -> IORef (Maybe ThreadId) -> IORef (Maybe Handle) -> IORef (Maybe ProcessHandle) -> IORef (Maybe ThreadId) -> IORef (Maybe Handle) -> Window -> UI ()
+setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef mcHandleRef simPhRef simThreadRef simHandleRef window = do
     return window # set title "Reactive Functional Robotics"
 
     -- Load the homepage.html file and set it as the body content
@@ -119,7 +119,7 @@ setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef 
     on UI.click simulationButton $ \_ -> do
         setButtonActive simulationButton
         updateSimulationDisplay "Starting simulation..."
-        liftIO $ runProcessWithLiveOutput outputRef runnerPhRef runnerThreadRef runnerhandleRef window "python \"C:\\Users\\Work\\OneDrive - KU Leuven\\Documents\\PhD\\Code\\1_Research\\1_turtlebot_copp_programs\\main.py\"" 
+        liftIO $ runProcessWithLiveOutput outputRef simPhRef simThreadRef simHandleRef window "python \"C:\\Users\\Work\\OneDrive - KU Leuven\\Documents\\PhD\\Code\\1_Research\\1_turtlebot_copp_programs\\main.py\"" 
             (\lines -> void $ runUI window (updateSimulationDisplayHtml (unlines (map (\l -> "<div>" ++ l ++ "</div>") lines))))
         return ()
 
@@ -176,6 +176,25 @@ setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef 
             writeIORef mcPhRef Nothing
             writeIORef mcThreadRef Nothing
             writeIORef mcHandleRef Nothing
+            
+            -- Stop simulation
+            simph <- readIORef simPhRef
+            simth <- readIORef simThreadRef
+            simh  <- readIORef simHandleRef
+            case simph of
+              Just ph -> do
+                terminateProcess ph
+                putStrLn "Terminated simulation process"
+              Nothing -> putStrLn "No simulation process to terminate"
+            case simh of
+              Just h -> hClose h
+              Nothing -> return ()
+            case simth of
+              Just tid -> killThread tid
+              Nothing -> return ()
+            writeIORef simPhRef Nothing
+            writeIORef simThreadRef Nothing
+            writeIORef simHandleRef Nothing
             
             -- Exit the application
             exitSuccess
@@ -245,4 +264,7 @@ startFrontend = do
   mcPhRef <- newIORef Nothing
   mcThreadRef <- newIORef Nothing
   mcHandleRef <- newIORef Nothing
-  startGUI defaultConfig { jsStatic = Just "./FsmFrontend/static" } (setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef mcHandleRef)
+  simPhRef <- newIORef Nothing
+  simThreadRef <- newIORef Nothing
+  simHandleRef <- newIORef Nothing
+  startGUI defaultConfig { jsStatic = Just "./FsmFrontend/static" } (setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef mcHandleRef simPhRef simThreadRef simHandleRef)
