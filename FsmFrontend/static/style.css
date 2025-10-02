@@ -22,6 +22,18 @@ body {
     margin-bottom: 20px;
 }
 
+.header-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+}
+
+.header-logo {
+    height: 50px;
+    width: auto;
+}
+
 .buttons-container {
     display: flex;
     justify-content: space-between;
