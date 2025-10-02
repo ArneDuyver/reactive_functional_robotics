@@ -2,12 +2,13 @@ module FsmFrontend where
 
 import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core
-import System.Process (std_out, readProcess, readCreateProcess, shell, createProcess, StdStream(CreatePipe), waitForProcess, terminateProcess, ProcessHandle)
+import System.Process (std_out, readProcess, readCreateProcess, shell, createProcess, StdStream(CreatePipe), waitForProcess, terminateProcess, ProcessHandle, interruptProcessGroupOf)
 import System.IO (hSetBuffering, BufferMode(LineBuffering), hIsEOF, hGetLine, Handle, hClose)
 import Control.Monad (void)
 import Data.IORef
 import System.Exit (exitSuccess)
 import Control.Concurrent (forkIO, killThread, ThreadId, threadDelay)
+import Control.Exception (catch, SomeException)
 
 
 -- outputRef: Stores accumulated output lines from running processes
@@ -177,17 +178,24 @@ setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef 
             writeIORef mcThreadRef Nothing
             writeIORef mcHandleRef Nothing
             
-            -- Stop simulation
+            -- Stop simulation (with keyboard interrupt)
             simph <- readIORef simPhRef
             simth <- readIORef simThreadRef
             simh  <- readIORef simHandleRef
             case simph of
               Just ph -> do
-                terminateProcess ph
-                putStrLn "Terminated simulation process"
+                putStrLn "Sending keyboard interrupt to simulation process..."
+                catch (interruptProcessGroupOf ph) (\(e :: SomeException) -> 
+                  putStrLn $ "Failed to interrupt simulation, trying terminate: " ++ show e)
+                -- Wait a moment for graceful shutdown
+                threadDelay 1000000 -- 1 second
+                -- If still running, force terminate
+                catch (terminateProcess ph) (\(e :: SomeException) -> 
+                  putStrLn $ "Failed to terminate simulation: " ++ show e)
+                putStrLn "Simulation process stopped"
               Nothing -> putStrLn "No simulation process to terminate"
             case simh of
-              Just h -> hClose h
+              Just h -> catch (hClose h) (\(e :: SomeException) -> return ())
               Nothing -> return ()
             case simth of
               Just tid -> killThread tid
