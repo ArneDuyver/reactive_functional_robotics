@@ -116,10 +116,10 @@ function startApp() {
     try {
       const data = JSON.parse(message.toString());
       if (topic === topicHighlight) {
-        // console.log(data)
+        console.log(data)
         // Extract state from OutputState structure: data.outputData.state
         const newActiveClass = data.outputData && data.outputData.state ? data.outputData.state : null;
-        // console.log("[DEBUG] Received state:", newActiveClass);
+        console.log("[DEBUG] Received state:", newActiveClass);
 
         let stateChanged = false;
         

@@ -28,6 +28,11 @@ setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef 
     -- Wait a moment for DOM to be ready
     liftIO $ threadDelay 500000 -- 500ms to ensure DOM is loaded
 
+    -- Get the gear button and upload button from HTML
+    gearButton <- getElementById window "settings-btn"
+    uploadButton <- getElementById window "upload-btn"
+    fileInput <- getElementById window "file-input"
+
     -- Create Threepenny buttons with proper CSS classes and IDs
     collectButton <- UI.button # set text "Collect" 
                               # set (attr "class") "btn btn-process"
@@ -45,6 +50,8 @@ setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef 
                             # set (attr "class") "btn btn-clear"
     quitButton <- UI.button # set text "Quit"
                            # set (attr "class") "btn btn-quit"
+    
+    
 
     -- Create Threepenny display areas for each tab
     collectDisplayArea <- UI.div # set (attr "class") "display-area"
@@ -131,6 +138,26 @@ setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef 
         void $ updateRunDisplay ""
         void $ updateBuildDisplay ""
         void $ updateSimulationDisplay ""
+
+    -- Event handler for gear button - opens states folder
+    case gearButton of
+        Just btn -> on UI.click btn $ \_ -> do
+            liftIO $ do
+                catch (do
+                  _ <- readProcess "explorer" ["FsmRunner\\src\\Helpers\\States"] ""
+                  return ())
+                  (\e -> putStrLn $ "Failed to open folder: " ++ show (e :: SomeException))
+            return ()
+        Nothing -> return ()
+
+    -- Event handler for upload button - opens config folder
+    case uploadButton of
+        Just btn -> on UI.click btn $ \_ -> do
+            liftIO $ do
+                putStrLn "Opening config folder..."
+                _ <- createProcess (shell "explorer.exe config")
+                return ()
+        Nothing -> return ()
 
     on UI.click quitButton $ \_ -> do
         updateCollectDisplay "Stopping processes..."

@@ -18,8 +18,7 @@ executable fsmrunner
                     , Helpers.Turtlebot
                     , Helpers.YampaHelper
                     , Helpers.Controllers.OutputState
-                    , Helpers.Controllers.Turtlebot
-                    , Helpers.Controllers.SimpleTwo                    , Helpers.States.SimpleState
+                    , Helpers.Controllers.Turtlebot                    , Helpers.States.SimpleState
                     , Helpers.States.EndState
                     , Helpers.States.ErrorState
                     

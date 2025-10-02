@@ -7,17 +7,55 @@ import FRP.Yampa
 import Helpers.YampaHelper
 {{import_controllers}}
 
+{{decode_function_signatures}}
+
+-- State behavior logic function - modify this to implement your state behavior
+stateBehaviour :: {{input_types}} -> {{output_type}}
+stateBehaviour {{input_parameters}} = {{output_variable}}
+  -- Create default types for Output
+  where {{output_variable}} = {{default_output}}
+      -- Add your control logic here using the input parameters:
+      {{control_logic_comments}}
+
+-- State transition logic function - determines next state based on inputs
+stateTransition :: {{input_types}} -> (Bool, String)
+stateTransition {{input_parameters}} = 
+  -- Add your transition logic here using the input parameters:
+  -- Return (shouldSwitch, targetStateName)
+  let shouldSwitch = False  -- Change this condition based on your logic
+      targetState = "newStateName"  -- Target state name
+      -- Example logic based on sensor readings:
+{{transition_logic_comments}}
+  in (shouldSwitch, targetState)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 {{stateNameLower}}StateSF :: SF String OutputState
 {{stateNameLower}}StateSF = proc inputStr -> do
   -- Decode inputs for string
 {{decode_critical_controllers}}
-  -- Create default types for Output
-{{default_outputtypes}}
-    
-  -- #### Control logic CHANGE THE DEFAULT OUTPUT VALUES TO THE DESIRED VALUE ####
 
-  -- #### END: Control logic ####
-
+  let {{output_variable}} = stateBehaviour {{input_variables}}
+ 
   -- Create OutputData with state name
   let outputData = OutputData { {{outputdata}}, state = "{{stateName}}" }
   -- Create the error string
@@ -36,5 +74,12 @@ import Helpers.YampaHelper
 
 analyzer{{stateName}}State :: SF (String, OutputState) (Event (String))
 analyzer{{stateName}}State = proc (sfInput, sfOutput) -> do
-  e <- edgeTag "newStateName" -< True 
+  -- Decode inputs for analysis
+{{decode_critical_controllers_analyzer}}
+
+  -- Determine next state using transition logic
+  let (shouldSwitch, targetStateName) = stateTransition {{input_variables_analyzer}}
+  
+  t <- time -< () 
+  e <- edgeTag targetStateName -< shouldSwitch && t > 4 
   returnA -< e

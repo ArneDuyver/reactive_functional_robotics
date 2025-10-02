@@ -3,6 +3,7 @@
 
 module FsmBuilder (State (..), parseXml, main) where
 
+import Control.Monad (filterM)
 import Data.Aeson qualified as Aeson
 import Data.Char (toLower, toUpper)
 import Data.List (intercalate)
@@ -12,7 +13,7 @@ import InputBuilder qualified as IB
 import MixedBuilder qualified as MB
 import OutputBuilder qualified as OB
 import RfrUtilities (capitalize)
-import System.Directory (createDirectoryIfMissing, listDirectory, removeFile)
+import System.Directory (createDirectoryIfMissing, listDirectory, removeFile, doesFileExist, doesDirectoryExist)
 import System.Environment (getArgs)
 import System.FilePath (takeExtension, (</>))
 import Text.Mustache qualified as Mustache
@@ -146,7 +147,125 @@ generateInputErrorsDebugs controllers =
       let controllerName = IB.rawControllerName controller
        in "(\"" ++ controllerName ++ "\", " ++ controllerName ++ "ErrFlag, " ++ controllerName ++ "DebugMsg)"
 
--- Generate the ErrorState file using the errorstate template
+-- Generate function input types for stateBehaviour and stateTransition
+generateInputTypes :: [IB.RawControllerInputState] -> String
+generateInputTypes controllers =
+  let criticalControllers = filter IB.rawCritical controllers
+      inputTypes = map (\controller -> capitalize (IB.rawControllerName controller) ++ "State") criticalControllers
+   in intercalate " -> " inputTypes
+
+-- Generate function input parameters for stateBehaviour and stateTransition
+generateInputParameters :: [IB.RawControllerInputState] -> String
+generateInputParameters controllers =
+  let criticalControllers = filter IB.rawCritical controllers
+      inputParams = map IB.rawControllerName criticalControllers
+   in intercalate " " inputParams
+
+-- Generate input variables for function calls
+generateInputVariables :: [IB.RawControllerInputState] -> String
+generateInputVariables controllers =
+  let criticalControllers = filter IB.rawCritical controllers
+      inputVars = map IB.rawControllerName criticalControllers
+   in intercalate " " inputVars
+
+-- Generate output type for stateBehaviour function
+generateOutputType :: [OB.RawControllerOutputState] -> String
+generateOutputType outputControllers =
+  case outputControllers of
+    [controller] -> capitalize (OB.rawOutputControllerName controller) ++ "State"
+    _ -> "TurtlebotState" -- Default fallback
+
+-- Generate output variable name
+generateOutputVariable :: [OB.RawControllerOutputState] -> String
+generateOutputVariable outputControllers =
+  case outputControllers of
+    [controller] -> OB.rawOutputControllerName controller ++ "Out"
+    _ -> "turtlebotOut" -- Default fallback
+
+-- Generate default output constructor
+generateDefaultOutput :: [OB.RawControllerOutputState] -> String
+generateDefaultOutput outputControllers =
+  case outputControllers of
+    [controller] -> "default" ++ capitalize (OB.rawOutputControllerName controller)
+    _ -> "defaultTurtlebot" -- Default fallback
+
+-- Generate control logic comments
+generateControlLogicComments :: [IB.RawControllerInputState] -> [OB.RawControllerOutputState] -> String
+generateControlLogicComments inputControllers outputControllers =
+  let outputVar = generateOutputVariable outputControllers
+      criticalInputs = filter IB.rawCritical inputControllers
+      outputFields = case outputControllers of
+        [controller] -> OB.rawOutputs controller
+        _ -> [] -- Default fallback
+      
+      -- Generate example field assignments
+      fieldExamples = case outputFields of
+        (field1:field2:_) -> 
+          "      -- " ++ outputVar ++ "' = " ++ outputVar ++ " { \n" ++
+          "      --   " ++ OB.rawOutputName field1 ++ " = if (value " ++ (head (map IB.rawControllerName criticalInputs)) ++ ") > 0.5 then 1.0 else 0.0,\n" ++
+          "      --   " ++ OB.rawOutputName field2 ++ " = if (value " ++ (head (map IB.rawControllerName criticalInputs)) ++ ") > 0.5 then 1.0 else 0.0 \n" ++
+          "      -- }"
+        [field] ->
+          "      -- " ++ outputVar ++ "' = " ++ outputVar ++ " { " ++ OB.rawOutputName field ++ " = newValue }"
+        _ ->
+          "      -- " ++ outputVar ++ "' = " ++ outputVar ++ " { field1 = value1, field2 = value2 }"
+      
+      -- Generate sensor access examples
+      sensorExamples = case criticalInputs of
+        (input:_) -> 
+          "      -- \n" ++
+          "      -- Access input sensor data like:\n" ++
+          "      -- - " ++ IB.rawControllerName input ++ " sensor: (value " ++ IB.rawControllerName input ++ ") gives you the sensor reading\n" ++
+          "      -- - " ++ (if null criticalInputs then "turtlebot" else head (map IB.rawControllerName criticalInputs)) ++ " state: use existing parameter for feedback control"
+        _ -> 
+          "      -- \n" ++
+          "      -- Access input sensor data from the function parameters"
+   in fieldExamples ++ sensorExamples
+
+-- Generate decode statements for analyzer
+generateCriticalControllerDecodesAnalyzer :: [IB.RawControllerInputState] -> String
+generateCriticalControllerDecodesAnalyzer controllers =
+  let criticalControllers = filter IB.rawCritical controllers
+      decodeStatements = map generateDecodeStatement criticalControllers
+   in unlines decodeStatements
+  where
+    generateDecodeStatement controller =
+      let controllerName = IB.rawControllerName controller
+          capitalizedName = capitalize controllerName
+       in "  let (" ++ controllerName ++ ", " ++ controllerName ++ "ErrFlag, " ++ controllerName ++ "DebugMsg) = decode" ++ capitalizedName ++ "State sfInput"
+
+-- Generate input variables for analyzer function calls
+generateInputVariablesAnalyzer :: [IB.RawControllerInputState] -> String
+generateInputVariablesAnalyzer controllers =
+  let criticalControllers = filter IB.rawCritical controllers
+      inputVars = map IB.rawControllerName criticalControllers
+   in intercalate " " inputVars
+
+-- Generate transition logic comments
+generateTransitionLogicComments :: [IB.RawControllerInputState] -> String
+generateTransitionLogicComments inputControllers =
+  let criticalInputs = filter IB.rawCritical inputControllers
+      exampleCondition = case criticalInputs of
+        (input:_) -> 
+          "      -- shouldSwitch = (value " ++ IB.rawControllerName input ++ ") > 0.8  -- Switch when sensor reading is high\n" ++
+          "      -- targetState = if (value " ++ IB.rawControllerName input ++ ") > 0.8 then \"FastState\" \n" ++
+          "      --              else if (value " ++ IB.rawControllerName input ++ ") < 0.2 then \"SlowState\"\n" ++
+          "      --              else \"IdleState\"\n" ++
+          "      --\n" ++
+          "      -- Access input data:\n" ++
+          "      -- - (value " ++ IB.rawControllerName input ++ "): Get the sensor reading from " ++ IB.rawControllerName input ++ " controller"
+        _ -> 
+          "      -- shouldSwitch = someCondition  -- Define your switching condition\n" ++
+          "      -- targetState = \"TargetStateName\"  -- Define target state"
+      
+      additionalInputs = case drop 1 criticalInputs of
+        (input2:_) -> "\n      -- - " ++ IB.rawControllerName input2 ++ ": Access " ++ IB.rawControllerName input2 ++ " state for feedback-based decisions"
+        _ -> case criticalInputs of
+          (_:_) -> "\n      -- - turtlebot: Access previous turtlebot state for feedback-based decisions"
+          _ -> ""
+   in exampleCondition ++ additionalInputs
+
+-- Generate the ErrorState file using the errorstate template (only if it doesn't exist)
 writeErrorStateFile :: [String] -> [IB.RawControllerInputState] -> [OB.RawControllerOutputState] -> IO ()
 writeErrorStateFile controllerNames controllers outputControllers = do
   let stateName = "Error" :: String
@@ -157,27 +276,32 @@ writeErrorStateFile controllerNames controllers outputControllers = do
       defaultOutputTypes = generateDefaultOutputTypes outputControllers
       outputDataFields = generateOutputDataFields outputControllers
       inputErrorsDebugs = generateInputErrorsDebugs controllers
-  eTemplate <- Mustache.automaticCompile ["./FsmBuilder/templates"] "errorstate.mustache"
-  case eTemplate of
-    Left err -> putStrLn $ "Template parse error: " ++ show err
-    Right template -> do
-      let context =
-            Aeson.object
-              [ "stateName" Aeson..= stateName,
-                "moduleName" Aeson..= moduleName,
-                "import_controllers" Aeson..= controllerImports,
-                "decode_critical_controllers" Aeson..= criticalDecodes,
-                "default_outputtypes" Aeson..= defaultOutputTypes,
-                "outputdata" Aeson..= outputDataFields,
-                "input_errors_debugs" Aeson..= inputErrorsDebugs
-              ]
-          rendered = Mustache.substitute template context
-      -- replace HTML entity &quot; with real double-quote and write
-      let fixed = T.replace "&quot;" "\"" rendered
-      writeFile fileName (T.unpack fixed)
-      putStrLn $ "Wrote " ++ fileName
+  
+  fileExists <- doesFileExist fileName
+  if fileExists
+    then putStrLn $ "Skipped " ++ fileName ++ " (already exists)"
+    else do
+      eTemplate <- Mustache.automaticCompile ["./FsmBuilder/templates"] "errorstate.mustache"
+      case eTemplate of
+        Left err -> putStrLn $ "Template parse error: " ++ show err
+        Right template -> do
+          let context =
+                Aeson.object
+                  [ "stateName" Aeson..= stateName,
+                    "moduleName" Aeson..= moduleName,
+                    "import_controllers" Aeson..= controllerImports,
+                    "decode_critical_controllers" Aeson..= criticalDecodes,
+                    "default_outputtypes" Aeson..= defaultOutputTypes,
+                    "outputdata" Aeson..= outputDataFields,
+                    "input_errors_debugs" Aeson..= inputErrorsDebugs
+                  ]
+              rendered = Mustache.substitute template context
+          -- replace HTML entities with real characters and write
+          let fixed = T.replace "&quot;" "\"" . T.replace "&gt;" ">" . T.replace "&#39;" "'" $ rendered
+          writeFile fileName (T.unpack fixed)
+          putStrLn $ "Wrote " ++ fileName
 
--- Generate a state file from a State datatype using the template TODO: generate the import Inputs based on YML file
+-- Generate a state file from a State datatype using the template (only if it doesn't exist)
 writeStateFile :: [String] -> [IB.RawControllerInputState] -> [OB.RawControllerOutputState] -> State -> IO ()
 writeStateFile controllerNames controllers outputControllers st = do
   let stateName = capitalize (name st)
@@ -188,25 +312,52 @@ writeStateFile controllerNames controllers outputControllers st = do
       defaultOutputTypes = generateDefaultOutputTypes outputControllers
       outputDataFields = generateOutputDataFields outputControllers
       inputErrorsDebugs = generateInputErrorsDebugs controllers
-  eTemplate <- Mustache.automaticCompile ["./FsmBuilder/templates"] "state.mustache"
-  case eTemplate of
-    Left err -> putStrLn $ "Template parse error: " ++ show err
-    Right template -> do
-      let context =
-            Aeson.object
-              [ "stateName" Aeson..= stateName,
-                "stateNameLower" Aeson..= lowercaseFirst stateName,
-                "moduleName" Aeson..= moduleName,
-                "import_controllers" Aeson..= controllerImports,
-                "decode_critical_controllers" Aeson..= criticalDecodes,
-                "default_outputtypes" Aeson..= defaultOutputTypes,
-                "outputdata" Aeson..= outputDataFields,
-                "input_errors_debugs" Aeson..= inputErrorsDebugs
-              ]
-          rendered = Mustache.substitute template context
-      -- replace HTML entity &quot; with real double-quote and write
-      let fixed = T.replace "&quot;" "\"" rendered
-      writeFile fileName (T.unpack fixed)
+      -- New template variables
+      inputTypes = generateInputTypes controllers
+      inputParameters = generateInputParameters controllers
+      inputVariables = generateInputVariables controllers
+      outputType = generateOutputType outputControllers
+      outputVariable = generateOutputVariable outputControllers
+      defaultOutput = generateDefaultOutput outputControllers
+      controlLogicComments = generateControlLogicComments controllers outputControllers
+      criticalDecodesAnalyzer = generateCriticalControllerDecodesAnalyzer controllers
+      inputVariablesAnalyzer = generateInputVariablesAnalyzer controllers
+      transitionLogicComments = generateTransitionLogicComments controllers
+  
+  fileExists <- doesFileExist fileName
+  if fileExists
+    then putStrLn $ "Skipped " ++ fileName ++ " (already exists)"
+    else do
+      eTemplate <- Mustache.automaticCompile ["./FsmBuilder/templates"] "state.mustache"
+      case eTemplate of
+        Left err -> putStrLn $ "Template parse error: " ++ show err
+        Right template -> do
+          let context =
+                Aeson.object
+                  [ "stateName" Aeson..= stateName,
+                    "stateNameLower" Aeson..= lowercaseFirst stateName,
+                    "moduleName" Aeson..= moduleName,
+                    "import_controllers" Aeson..= controllerImports,
+                    "decode_critical_controllers" Aeson..= criticalDecodes,
+                    "default_outputtypes" Aeson..= defaultOutputTypes,
+                    "outputdata" Aeson..= outputDataFields,
+                    "input_errors_debugs" Aeson..= inputErrorsDebugs,
+                    -- New template variables
+                    "input_types" Aeson..= inputTypes,
+                    "input_parameters" Aeson..= inputParameters,
+                    "input_variables" Aeson..= inputVariables,
+                    "output_type" Aeson..= outputType,
+                    "output_variable" Aeson..= outputVariable,
+                    "default_output" Aeson..= defaultOutput,
+                    "control_logic_comments" Aeson..= controlLogicComments,
+                    "decode_critical_controllers_analyzer" Aeson..= criticalDecodesAnalyzer,
+                    "input_variables_analyzer" Aeson..= inputVariablesAnalyzer,
+                    "transition_logic_comments" Aeson..= transitionLogicComments
+                  ]
+              rendered = Mustache.substitute template context
+          -- replace HTML entities with real characters and write
+          let fixed = T.replace "&quot;" "\"" . T.replace "&gt;" ">" . T.replace "&#39;" "'" $ rendered
+          writeFile fileName (T.unpack fixed)
 
 -- Generate import and mapping lines for a list of State names
 createMappingEntries :: [String] -> String
@@ -258,157 +409,37 @@ createDiagramDataJS states =
           "let activeClass = \"" ++ startState ++ "\";"
         ]
 
--- Write fsm.html using the template and createDiagramDataJS output
-writeFSMHtmlFile :: [State] -> IO ()
-writeFSMHtmlFile states = do
-  let diagramDataJS = createDiagramDataJS states
-      htmlContent =
-        unlines
-          [ "<!DOCTYPE html>",
-            "<html lang=\"en\">",
-            "",
-            "<head>",
-            "  <meta charset=\"UTF-8\">",
-            "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
-            "  <title>Mermaid & MQTT Client</title>",
-            "",
-            "  <script src=\"https://unpkg.com/mqtt/dist/mqtt.min.js\"></script>",
-            "  <script type=\"module\">",
-            "    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';",
-            "    mermaid.initialize({ startOnLoad: true });",
-            "",
-            "    const brokerUrl = \"ws://localhost:9001\"; // Aanpassen indien nodig",
-            "    const topicHighlight = \"update/robot_state\"; // Highlight klasse naam",
-            "",
-            "    const client = mqtt.connect(brokerUrl);",
-            "",
-            diagramDataJS,
-            "",
-            "    client.on(\"connect\", () => {",
-            "      console.log(\"[DEBUG] Verbonden met MQTT broker\");",
-            "",
-            "      client.subscribe(topicClasses, (err) => {",
-            "        if (!err) {",
-            "          console.log(`[DEBUG] Geabonneerd op ${topicClasses}`);",
-            "          client.publish(topicClasses, \"REQUEST_UPDATE\");",
-            "        }",
-            "      });",
-            "",
-            "      client.subscribe(topicHighlight, (err) => {",
-            "        if (!err) {",
-            "          console.log(`[DEBUG] Geabonneerd op ${topicHighlight}`);",
-            "          client.publish(topicHighlight, \"REQUEST_UPDATE\");",
-            "        }",
-            "      });",
-            "    });",
-            "",
-            "    client.on(\"message\", (topic, message) => {",
-            "      console.log(`[DEBUG] Bericht ontvangen op ${topic}: ${message.toString()}`);",
-            "      try {",
-            "        const data = JSON.parse(message.toString());",
-            "",
-            "        if (topic === topicClasses) {",
-            "          diagramData = data;",
-            "          updateDiagram();",
-            "        } else if (topic === topicHighlight) {",
-            "          activeClass = data.activeClass || null; // Verwacht: { \"activeClass\": \"ClassName\" }",
-            "          if (!diagramData.classes.includes(activeClass)) {",
-            "            activeClass = null;",
-            "          }",
-            "          updateDiagram();",
-            "        } else {",
-            "          console.warn(`[DEBUG] Onbekend topic: ${topic}`);",
-            "        }",
-            "",
-            "      } catch (err) {",
-            "        console.error(\"[DEBUG] Fout bij parsen van bericht:\", err);",
-            "      }",
-            "    });",
-            "",
-            "    function updateDiagram() {",
-            "      const container = document.getElementById(\"mermaid-container\");",
-            "      if (!diagramData) return;",
-            "",
-            "      let diagram = \"graph LR\\n\";",
-            "      diagramData.classes.forEach(cls => {",
-            "        if (cls === activeClass) {",
-            "          diagram += `${cls}([\"${cls}\"]):::highlight\\n`;",
-            "        } else {",
-            "          diagram += `${cls}(${cls})\\n`;",
-            "        }",
-            "      });",
-            "      diagramData.associations.forEach(([c1, c2]) => {",
-            "        diagram += `${c1} --> ${c2}\\n`;",
-            "      });",
-            "",
-            "      container.classList.remove(\"fade-in\");",
-            "      container.innerHTML = `<pre class=\"mermaid\">${diagram}</pre>`;",
-            "",
-            "      mermaid.init(undefined, container.querySelector(\".mermaid\"));",
-            "      setTimeout(() => {",
-            "        container.classList.add(\"fade-in\");",
-            "      }, 10);",
-            "    }",
-            "",
-            "    document.addEventListener(\"DOMContentLoaded\", () => {",
-            "      updateDiagram();",
-            "    });",
-            "",
-            "  </script>",
-            "",
-            "  <link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.css\">",
-            "",
-            "  <style>",
-            "    #mermaid-container {",
-            "      transition: opacity 0.5s ease;",
-            "      opacity: 1;",
-            "      min-height: 200px;",
-            "    }",
-            "",
-            "    #mermaid-container.fade-in {",
-            "      opacity: 1;",
-            "    }",
-            "",
-            "    #mermaid-container:not(.fade-in) {",
-            "      opacity: 0;",
-            "    }",
-            "",
-            "    /* Mermaid custom styling voor highlighten */",
-            "    .mermaid .highlight>rect {",
-            "      fill: #ffeb3b !important;",
-            "      /* Gele kleur */",
-            "      stroke: #f57f17 !important;",
-            "      stroke-width: 3px;",
-            "    }",
-            "  </style>",
-            "</head>",
-            "",
-            "<body>",
-            "  <h1>Mermaid & MQTT Client</h1>",
-            "  <div id=\"mermaid-container\" class=\"fade-in\">Loading...</div>",
-            "</body>",
-            "",
-            "</html>"
-          ]
-  writeFile "FsmRunner/src/fsm.html" htmlContent
-
--- Clean up States directory (except .bk files)
-cleanStatesDirectory :: IO ()
-cleanStatesDirectory = do
+-- Manage States directory: only remove files that are no longer needed
+manageStatesDirectory :: [String] -> IO ()
+manageStatesDirectory neededStateNames = do
   let outDir = "FsmRunner/src/Helpers/States"
   createDirectoryIfMissing True outDir
-  files <- listDirectory outDir
-  let filesToDelete = filter (\f -> takeExtension f /= ".bk") files
+  allItems <- listDirectory outDir
+  
+  -- Filter to only get files (not directories)
+  files <- filterM (\item -> do
+    let fullPath = outDir </> item
+    isFile <- doesFileExist fullPath
+    return isFile) allItems
+  
+  -- Generate expected filenames for needed states (including ErrorState)
+  let expectedFiles = map (\name -> lowercaseFirst (capitalize name) ++ "State.hs") neededStateNames ++ ["errorState.hs"]
+  
+  -- Files to keep: expected files and .bk files
+  let filesToKeep = filter (\f -> f `elem` expectedFiles || takeExtension f == ".bk") files
+  let filesToDelete = filter (\f -> f `notElem` expectedFiles && takeExtension f /= ".bk") files
+  
+  -- Remove only unnecessary files
   mapM_ (\f -> removeFile (outDir </> f)) filesToDelete
-  putStrLn $ "Cleaned States directory, preserved " ++ show (length files - length filesToDelete) ++ " .bk files"
+  
+  putStrLn $ "Managed States directory: kept " ++ show (length filesToKeep) ++ " files, removed " ++ show (length filesToDelete) ++ " unnecessary files"
 
 main :: [String] -> [IB.RawControllerInputState] -> [OB.RawControllerOutputState] -> [State] -> IO ()
 main controllerNames controllers outputControllers states = do
   let stateNames = map name states
-  cleanStatesDirectory
+  manageStatesDirectory stateNames
   mapM_ (writeStateFile controllerNames controllers outputControllers) states
   writeErrorStateFile controllerNames controllers outputControllers
   writeControllogicFile controllerNames controllers outputControllers states
   MB.main controllers outputControllers stateNames
-  -- writeFSMHtmlFile states TODO FIXME
   putStrLn "FSM files generated successfully."

@@ -6,8 +6,62 @@ import Control.Concurrent
 import FRP.Yampa
 import Helpers.YampaHelper
 import Helpers.Controllers.Turtlebot
-import Helpers.Controllers.SimpleTwo
 import Helpers.Controllers.OutputState
+
+
+
+
+-- State behavior logic function - modify this to implement your state behavior
+stateBehaviour :: TurtlebotState -> Turtlebot
+stateBehaviour turtlebot = turtlebotOut
+  -- Create default types for Output
+  where turtlebotOut = defaultTurtlebot
+      -- Add your control logic here using the input parameters:
+            -- turtlebotOut' = turtlebotOut { 
+      --   motorLeft = if (value turtlebot) > 0.5 then 1.0 else 0.0,
+      --   motorRight = if (value turtlebot) > 0.5 then 1.0 else 0.0 
+      -- }      -- 
+      -- Access input sensor data like:
+      -- - turtlebot sensor: (value turtlebot) gives you the sensor reading
+      -- - turtlebot state: use existing parameter for feedback control
+
+-- State transition logic function - determines next state based on inputs
+stateTransition :: TurtlebotState -> (Bool, String)
+stateTransition turtlebot = 
+  -- Add your transition logic here using the input parameters:
+  -- Return (shouldSwitch, targetStateName)
+  let shouldSwitch = False  -- Change this condition based on your logic
+      targetState = "newStateName"  -- Target state name
+      -- Example logic based on sensor readings:
+      -- shouldSwitch = (value turtlebot) > 0.8  -- Switch when sensor reading is high
+      -- targetState = if (value turtlebot) > 0.8 then "FastState" 
+      --              else if (value turtlebot) &lt; 0.2 then "SlowState"
+      --              else "IdleState"
+      --
+      -- Access input data:
+      -- - (value turtlebot): Get the sensor reading from turtlebot controller
+      -- - turtlebot: Access previous turtlebot state for feedback-based decisions
+  in (shouldSwitch, targetState)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 endStateSF :: SF String OutputState
@@ -15,14 +69,9 @@ endStateSF = proc inputStr -> do
   -- Decode inputs for string
   let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState inputStr
 
-  -- Create default types for Output
-  let turtlebotOut = defaultTurtlebot
 
-    
-  -- #### Control logic CHANGE THE DEFAULT OUTPUT VALUES TO THE DESIRED VALUE ####
-
-  -- #### END: Control logic ####
-
+  let turtlebotOut = stateBehaviour turtlebot
+ 
   -- Create OutputData with state name
   let outputData = OutputData { turtlebot = turtlebotOut, state = "End" }
   -- Create the error string
@@ -41,5 +90,13 @@ endStateSF = proc inputStr -> do
 
 analyzerEndState :: SF (String, OutputState) (Event (String))
 analyzerEndState = proc (sfInput, sfOutput) -> do
-  e <- edgeTag "newStateName" -< True 
+  -- Decode inputs for analysis
+  let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState sfInput
+
+
+  -- Determine next state using transition logic
+  let (shouldSwitch, targetState) = stateTransition turtlebot
+  
+  t <- time -< () 
+  e <- edgeTag "endState" -< True
   returnA -< e

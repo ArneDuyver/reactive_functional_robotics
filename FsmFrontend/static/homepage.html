@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Reactive Functional Robotics</title>
     <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css" integrity="sha512-2SwdPD6INVrV/lHTZbO2nodKhrnDdJK9/kg2XD1r9uGqPo1cUbujc+IYdlYdEErWNu69gVcYgdxlmVmzTWnetw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 </head>
 <body>
     <div class="container">
@@ -12,8 +13,15 @@
             <h1>Reactive Functional Robotics</h1>
         </div>
         
-        <div class="button-row" id="threepenny-buttons">
-            <!-- Threepenny buttons will be added here -->
+        <div class="buttons-container">
+            <div class="button-row" id="threepenny-buttons">
+                <!-- Threepenny buttons will be added here -->
+            </div>
+            <div class="button-row-right">
+                <button class="btn btn-gear" id="settings-btn" title="Open States Folder"><i class="fa-solid fa-gear"></i></button>
+                <button class="btn btn-upload" id="upload-btn" title="Upload fsm.xml"><i class="fa-solid fa-arrow-up-from-bracket"></i></button>
+                <input type="file" id="file-input" accept=".xml" style="display: none;" />
+            </div>
         </div>
         
         <div class="tabs-container">
@@ -112,6 +120,12 @@
             const statusTime = document.getElementById('status-time');
             if (statusTime) statusTime.textContent = timeStr;
         }, 1000);
+        
+        // Upload button functionality - opens config folder
+        document.getElementById('upload-btn').addEventListener('click', function() {
+            // This will be handled by the Haskell backend to open config folder
+            console.log('Opening config folder...');
+        });
     </script>
 </body>
 </html>

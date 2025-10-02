@@ -17,13 +17,4 @@ controllers:
             name: motorRight
             type: Double
             default: 0.0
-        
-  - simpleTestTwo:
-      name: simpleTwo
-      critical: false
-      inputs:
-        - test:
-            name: testInput
-            type: String
-            default: "Default String"
 
