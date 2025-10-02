@@ -1,8 +1,9 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 module FsmFrontend where
 
 import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core
-import System.Process (std_out, readProcess, readCreateProcess, shell, createProcess, StdStream(CreatePipe), waitForProcess, terminateProcess, ProcessHandle, interruptProcessGroupOf)
+import System.Process (std_out, readProcess, readCreateProcess, shell, createProcess, StdStream(CreatePipe), waitForProcess, terminateProcess, ProcessHandle, getPid)
 import System.IO (hSetBuffering, BufferMode(LineBuffering), hIsEOF, hGetLine, Handle, hClose)
 import Control.Monad (void)
 import Data.IORef
@@ -178,24 +179,36 @@ setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef 
             writeIORef mcThreadRef Nothing
             writeIORef mcHandleRef Nothing
             
-            -- Stop simulation (with keyboard interrupt)
+            -- Stop simulation (send targeted Ctrl+C without affecting parent)
             simph <- readIORef simPhRef
             simth <- readIORef simThreadRef
             simh  <- readIORef simHandleRef
             case simph of
               Just ph -> do
-                putStrLn "Sending keyboard interrupt to simulation process..."
-                catch (interruptProcessGroupOf ph) (\(e :: SomeException) -> 
-                  putStrLn $ "Failed to interrupt simulation, trying terminate: " ++ show e)
-                -- Wait a moment for graceful shutdown
-                threadDelay 1000000 -- 1 second
-                -- If still running, force terminate
-                catch (terminateProcess ph) (\(e :: SomeException) -> 
-                  putStrLn $ "Failed to terminate simulation: " ++ show e)
-                putStrLn "Simulation process stopped"
+                putStrLn "Sending Ctrl+C to simulation process..."
+                mpid <- getPid ph
+                case mpid of
+                  Just pid -> do
+                    putStrLn $ "Sending SIGINT to Python process with PID: " ++ show pid
+                    -- Use taskkill without /F to send a graceful termination signal (similar to Ctrl+C)
+                    catch (do
+                      _ <- readProcess "taskkill" ["/PID", show pid] ""
+                      putStrLn "Graceful termination signal sent"
+                      return ()) 
+                          (\e -> do
+                            putStrLn $ "Graceful signal failed, trying force: " ++ show (e :: SomeException)
+                            -- If graceful fails, use force terminate
+                            catch (do
+                              _ <- readProcess "taskkill" ["/F", "/T", "/PID", show pid] ""
+                              return ())
+                              (\e2 -> putStrLn $ "Force terminate also failed: " ++ show (e2 :: SomeException)))
+                  Nothing -> putStrLn "Could not get process ID"
+                -- Wait for graceful shutdown
+                liftIO $ threadDelay 3000000 -- 3 seconds
+                putStrLn "Simulation process shutdown attempted"
               Nothing -> putStrLn "No simulation process to terminate"
             case simh of
-              Just h -> catch (hClose h) (\(e :: SomeException) -> return ())
+              Just h -> (hClose h) `catch` (\(_ :: SomeException) -> return ())
               Nothing -> return ()
             case simth of
               Just tid -> killThread tid
