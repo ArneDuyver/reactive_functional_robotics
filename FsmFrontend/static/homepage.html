@@ -29,6 +29,13 @@
             </div>
         </div>
         
+        <div class="python-path-container">
+            <label for="python-path-input">Simulation Script Path:</label>
+            <input type="text" id="python-path-input" class="python-path-input" 
+                   placeholder="Enter path to Python script (e.g., C:\path\to\your\script.py)" 
+                   value="C:\turtlebot_sim\main.py">
+        </div>
+        
         <div class="tabs-container">
             <div class="tab-content">
                 <div id="threepenny-display-messagecollector" class="active tab-pane">
@@ -131,6 +138,52 @@
             // This will be handled by the Haskell backend to open config folder
             console.log('Opening config folder...');
         });
+        
+        // Python path localStorage functionality
+        function setupPythonPathStorage() {
+            const pythonPathInput = document.getElementById('python-path-input');
+            const storageKey = 'rfr-python-path';
+            
+            if (pythonPathInput) {
+                // Load saved value from localStorage on page load
+                const savedPath = localStorage.getItem(storageKey);
+                if (savedPath) {
+                    pythonPathInput.value = savedPath;
+                    console.log('Loaded Python path from localStorage:', savedPath);
+                }
+                
+                // Save value to localStorage whenever it changes
+                pythonPathInput.addEventListener('input', function() {
+                    localStorage.setItem(storageKey, this.value);
+                    console.log('Saved Python path to localStorage:', this.value);
+                });
+                
+                // Also save on blur (when user clicks away)
+                pythonPathInput.addEventListener('blur', function() {
+                    localStorage.setItem(storageKey, this.value);
+                    console.log('Saved Python path to localStorage (on blur):', this.value);
+                });
+                
+                console.log('Python path localStorage setup completed');
+            } else {
+                console.log('Python path input not found, will retry...');
+                return false;
+            }
+            return true;
+        }
+        
+        // Setup Python path storage immediately
+        setupPythonPathStorage();
+        
+        // Also try when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            setupPythonPathStorage();
+        });
+        
+        // And try with a delay in case the input is added dynamically
+        setTimeout(() => {
+            setupPythonPathStorage();
+        }, 1000);
     </script>
 </body>
 </html>

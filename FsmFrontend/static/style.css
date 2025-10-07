@@ -134,6 +134,38 @@ body {
     background-color: #1976D2;
 }
 
+.python-path-container {
+    margin-bottom: 20px;
+    padding: 15px;
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+}
+
+.python-path-container label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: #333;
+}
+
+.python-path-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: monospace;
+    background-color: white;
+    box-sizing: border-box;
+}
+
+.python-path-input:focus {
+    outline: none;
+    border-color: #2196F3;
+    box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+}
+
 .display-area {
     border: 1px solid #ddd;
     padding: 15px;

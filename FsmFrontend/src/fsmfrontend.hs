@@ -10,6 +10,7 @@ import Data.IORef
 import System.Exit (exitSuccess)
 import Control.Concurrent (forkIO, killThread, ThreadId, threadDelay)
 import Control.Exception (catch, SomeException)
+import System.FilePath (takeDirectory)
 
 
 -- outputRef: Stores accumulated output lines from running processes
@@ -32,6 +33,7 @@ setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef 
     gearButton <- getElementById window "settings-btn"
     uploadButton <- getElementById window "upload-btn"
     fileInput <- getElementById window "file-input"
+    pythonPathInput <- getElementById window "python-path-input"
 
     -- Create Threepenny buttons with proper CSS classes and IDs
     collectButton <- UI.button # set text "Collect" 
@@ -128,7 +130,12 @@ setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef 
     on UI.click simulationButton $ \_ -> do
         setButtonActive simulationButton
         updateSimulationDisplay "Starting simulation..."
-        liftIO $ runProcessWithLiveOutput outputRef simPhRef simThreadRef simHandleRef window "python \"C:\\Users\\Work\\OneDrive - KU Leuven\\Documents\\PhD\\Code\\1_Research\\1_turtlebot_copp_programs\\main.py\"" 
+        -- Get the Python path from the input field
+        pythonPath <- case pythonPathInput of
+            Just input -> get value input
+            Nothing -> return "C:\\Users\\Work\\OneDrive - KU Leuven\\Documents\\PhD\\Code\\1_Research\\1_turtlebot_copp_programs\\main.py"
+        let command = "python \"" ++ pythonPath ++ "\""
+        liftIO $ runProcessWithLiveOutput outputRef simPhRef simThreadRef simHandleRef window command
             (\lines -> void $ runUI window (updateSimulationDisplayHtml (unlines (map (\l -> "<div>" ++ l ++ "</div>") lines))))
         return ()
 
@@ -176,7 +183,10 @@ setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef 
               Just ph -> do
                 terminateProcess ph
                 putStrLn "Terminated FsmRunner process"
-              Nothing -> putStrLn "No FsmRunner process to terminate"
+                void $ runUI window (updateRunDisplay "FsmRunner process terminated successfully")
+              Nothing -> do
+                putStrLn "No FsmRunner process to terminate"
+                void $ runUI window (updateRunDisplay "No FsmRunner process to terminate")
             case mh of
               Just h -> hClose h
               Nothing -> return ()
@@ -195,7 +205,10 @@ setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef 
               Just ph -> do
                 terminateProcess ph
                 putStrLn "Terminated messageCollector process"
-              Nothing -> putStrLn "No messageCollector process to terminate"
+                void $ runUI window (updateCollectDisplay "messageCollector process terminated successfully")
+              Nothing -> do
+                putStrLn "No messageCollector process to terminate"
+                void $ runUI window (updateCollectDisplay "No messageCollector process to terminate")
             case mch of
               Just h -> hClose h
               Nothing -> return ()
@@ -212,28 +225,51 @@ setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef 
             simh  <- readIORef simHandleRef
             case simph of
               Just ph -> do
-                putStrLn "Sending Ctrl+C to simulation process..."
+                putStrLn "Creating stop.flag file for graceful shutdown..."
+                -- Get the Python path from the input field (or use default)
+                pythonPath <- case pythonPathInput of
+                  Just input -> runUI window $ get value input
+                  Nothing -> return "C:\\Users\\Work\\OneDrive - KU Leuven\\Documents\\PhD\\Code\\1_Research\\1_turtlebot_copp_programs\\main.py"
+                
+                -- Extract directory from Python file path and create stop.flag there
+                let pythonDir = takeDirectory pythonPath
+                let flagFile = pythonDir ++ "\\stop.flag"
+                
+                catch (do
+                  writeFile flagFile ""
+                  putStrLn $ "Created stop.flag at: " ++ flagFile
+                  return ())
+                  (\e -> putStrLn $ "Failed to create stop.flag: " ++ show (e :: SomeException))
+                
+                -- Wait for graceful shutdown (check if process is still running)
+                putStrLn "Waiting for graceful shutdown (5 seconds)..."
+                liftIO $ threadDelay 5000000 -- 5 seconds
+                
+                -- Check if process is still running
                 mpid <- getPid ph
                 case mpid of
                   Just pid -> do
-                    putStrLn $ "Sending SIGINT to Python process with PID: " ++ show pid
-                    -- Use taskkill without /F to send a graceful termination signal (similar to Ctrl+C)
-                    catch (do
-                      _ <- readProcess "taskkill" ["/PID", show pid] ""
-                      putStrLn "Graceful termination signal sent"
-                      return ()) 
-                          (\e -> do
-                            putStrLn $ "Graceful signal failed, trying force: " ++ show (e :: SomeException)
-                            -- If graceful fails, use force terminate
-                            catch (do
-                              _ <- readProcess "taskkill" ["/F", "/T", "/PID", show pid] ""
-                              return ())
-                              (\e2 -> putStrLn $ "Force terminate also failed: " ++ show (e2 :: SomeException)))
-                  Nothing -> putStrLn "Could not get process ID"
-                -- Wait for graceful shutdown
-                liftIO $ threadDelay 3000000 -- 3 seconds
+                    -- Try to check if process is still running by sending a null signal
+                    stillRunning <- catch (do
+                      _ <- readProcess "tasklist" ["/FI", "PID eq " ++ show pid] ""
+                      return True)
+                      (\(_ :: SomeException) -> return False)
+                    
+                    if stillRunning
+                      then do
+                        putStrLn $ "Process still running after graceful shutdown attempt, using force terminate on PID: " ++ show pid
+                        catch (do
+                          _ <- readProcess "taskkill" ["/F", "/T", "/PID", show pid] ""
+                          putStrLn "Force termination completed"
+                          return ())
+                          (\e -> putStrLn $ "Force terminate failed: " ++ show (e :: SomeException))
+                      else putStrLn "Process exited gracefully"
+                  Nothing -> putStrLn "Could not get process ID for status check"
                 putStrLn "Simulation process shutdown attempted"
-              Nothing -> putStrLn "No simulation process to terminate"
+                void $ runUI window (updateSimulationDisplay "Simulation process terminated successfully \nNow stop the simulation in the simulator")
+              Nothing -> do
+                putStrLn "No simulation process to terminate"
+                void $ runUI window (updateSimulationDisplay "No simulation process to terminate \nNow stop the simulation in the simulator if necessary")
             case simh of
               Just h -> (hClose h) `catch` (\(_ :: SomeException) -> return ())
               Nothing -> return ()
