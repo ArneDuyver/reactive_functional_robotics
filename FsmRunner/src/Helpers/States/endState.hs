@@ -15,7 +15,7 @@ stateBehaviour :: SF TurtlebotState (Turtlebot, String)
 stateBehaviour = proc turtlebot -> do
   -- Create default types for Output
   let turtlebotOut = defaultTurtlebot
-      debugString = "STOPSIM STATE: end :: "  -- Customize this debug message
+      debugString = "STATE: end :: "  -- Customize this debug message
       -- Add your control logic here using the input parameters:
             -- turtlebotOut' = turtlebotOut { 
       --   motorLeft = if (value turtlebot) > 0.5 then 1.0 else 0.0,

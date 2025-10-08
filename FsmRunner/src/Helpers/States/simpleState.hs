@@ -14,7 +14,10 @@ import Helpers.Controllers.OutputState
 stateBehaviour :: SF TurtlebotState (Turtlebot, String)
 stateBehaviour = proc turtlebot -> do
   -- Create default types for Output
-  let turtlebotOut = defaultTurtlebot
+  let turtlebotOut = Turtlebot { 
+        motorLeft = 3,
+        motorRight = 3 
+      }
       debugString = "STATE: simple :: "  -- Customize this debug message
       -- Add your control logic here using the input parameters:
             -- turtlebotOut' = turtlebotOut { 
@@ -31,9 +34,8 @@ stateTransition :: SF TurtlebotState (Bool, String)
 stateTransition = proc turtlebot -> do
   -- Add your transition logic here using the input parameters:
   -- Return (shouldSwitch, targetStateName)
-  t <- time -< ()
-  let shouldSwitch = t > 3  -- Change this condition based on your logic
-      targetState = "endState"  -- Target state name
+  let shouldSwitch = False  -- Change this condition based on your logic
+      targetState = "newStateName"  -- Target state name
       -- Example logic based on sensor readings:
       -- shouldSwitch = (value turtlebot) > 0.8  -- Switch when sensor reading is high
       -- targetState = if (value turtlebot) > 0.8 then "FastState" 

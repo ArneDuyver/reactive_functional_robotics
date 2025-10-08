@@ -194,15 +194,51 @@ setup collectOutputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThr
         setButtonInactive simulationButton
         -- Run cleanup in background thread to avoid blocking UI
         liftIO $ forkIO $ do
-            -- Simple cleanup for all processes
-            -- Stop FsmRunner
+            -- Read all process references first before cleanup
             mph <- readIORef runnerPhRef
             mth <- readIORef runnerThreadRef
             mh  <- readIORef runnerhandleRef
+            mcph <- readIORef mcPhRef
+            mcth <- readIORef mcThreadRef
+            mch  <- readIORef mcHandleRef
+            simph <- readIORef simPhRef
+            simth <- readIORef simThreadRef
+            simh  <- readIORef simHandleRef
+            
+            -- Simple cleanup for all processes
+            -- Stop FsmRunner with graceful shutdown first
             case mph of
               Just ph -> do
-                terminateProcess ph
-                putStrLn "Terminated FsmRunner process"
+                -- Create stop signal file for graceful shutdown
+                catch (do
+                  writeFile "FsmRunner.stop" ""
+                  putStrLn "Created FsmRunner stop signal, waiting for graceful shutdown..."
+                  return ())
+                  (\e -> putStrLn $ "Failed to create FsmRunner stop signal: " ++ show (e :: SomeException))
+                -- Wait a bit for graceful shutdown
+                threadDelay 2000000 -- 2 seconds
+                -- Check if still running, then force terminate with taskkill
+                mExitCode <- getProcessExitCode ph
+                case mExitCode of
+                  Nothing -> do -- Still running, force terminate with taskkill
+                    mpid <- getPid ph
+                    case mpid of
+                      Just pid -> do
+                        putStrLn $ "FsmRunner still running after graceful shutdown attempt, using taskkill /F on PID: " ++ show pid
+                        catch (do
+                          _ <- readProcess "taskkill" ["/F", "/T", "/PID", show pid] ""
+                          putStrLn "Force termination with taskkill completed"
+                          return ())
+                          (\e -> do
+                            putStrLn $ "taskkill failed: " ++ show (e :: SomeException)
+                            putStrLn "Falling back to terminateProcess"
+                            terminateProcess ph)
+                      Nothing -> do
+                        putStrLn "Could not get process ID, using terminateProcess"
+                        terminateProcess ph
+                  Just _ -> putStrLn "FsmRunner stopped gracefully"
+                -- Clean up stop signal file
+                catch (removeFile "FsmRunner.stop") (\(_ :: SomeException) -> return ())
                 void $ runUI window (updateRunDisplayVoid "FsmRunner process terminated")
               Nothing -> void $ runUI window (updateRunDisplayVoid "No FsmRunner process to terminate")
             case mh of
@@ -216,9 +252,6 @@ setup collectOutputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThr
             writeIORef runnerhandleRef Nothing
             
             -- Stop messageCollector with graceful shutdown
-            mcph <- readIORef mcPhRef
-            mcth <- readIORef mcThreadRef
-            mch  <- readIORef mcHandleRef
             case mcph of
               Just ph -> do
                 -- Create stop signal file for graceful shutdown
@@ -233,6 +266,8 @@ setup collectOutputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThr
                     terminateProcess ph
                     putStrLn "Force terminated messageCollector process"
                   Just _ -> putStrLn "MessageCollector stopped gracefully"
+                -- Clean up stop signal file
+                catch (removeFile "messageCollector.stop") (\(_ :: SomeException) -> return ())
                 void $ runUI window (updateCollectDisplayVoid "messageCollector process terminated")
               Nothing -> void $ runUI window (updateCollectDisplayVoid "No messageCollector process to terminate")
             case mch of
@@ -246,9 +281,6 @@ setup collectOutputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThr
             writeIORef mcHandleRef Nothing
             
             -- Stop simulation with graceful shutdown first
-            simph <- readIORef simPhRef
-            simth <- readIORef simThreadRef
-            simh  <- readIORef simHandleRef
             case simph of
               Just ph -> do
                 putStrLn "Creating stop.flag file for graceful shutdown..."
