@@ -12,10 +12,11 @@
 <body>
     <div class="container">
         <div class="header">
+            <img src="/static/rfr_logo.png" alt="RFR Logo" class="header-logo">
             <div class="header-content">
-                <!-- <img src="/static/rfr_logo.png" alt="RFR Logo" class="header-logo"> -->
                 <h1>Reactive Functional Robotics</h1>
             </div>
+            <img src="/static/rfr_logo.png" alt="RFR Logo" class="header-logo">
         </div>
         
         <div class="buttons-container">
@@ -23,6 +24,12 @@
                 <!-- Threepenny buttons will be added here -->
             </div>
             <div class="button-row-right">
+                <button class="btn btn-python" id="python-btn" title="Change script path"><i class="fa-brands fa-python"></i></button>
+                <form target="_blank" action="https://app.diagrams.net/?src=about">
+                    <button class="btn drawio-logo" type="submit" value="Go to draw.io" title="Open draw.io">
+                        <img src="/static/drawio_logo.png" alt="draw.io" class="drawio-logo-img">
+                    </button>
+                </form>
                 <button class="btn btn-gear" id="settings-btn" title="Open States Folder"><i class="fa-solid fa-file-pen"></i></button>
                 <button class="btn btn-upload" id="upload-btn" title="Upload fsm.xml"><i class="fa-solid fa-gear"></i></button>
                 <input type="file" id="file-input" accept=".xml" style="display: none;" />
@@ -36,8 +43,13 @@
                    value="C:\turtlebot_sim\main.py">
         </div>
         
-        <div class="tabs-container">
-            <div class="tab-content">
+        <div class="tabs-container" id="tabs-container">
+            <div style="display: flex; justify-items: center; gap: 10px; padding: 10px 20px 0px 10px;">
+                <button id="applicationtabs_hide_btn" style="margin-bottom: 10px; padding: 0px; border: 0px; background: #FFFF;" onclick="applicationtabs_hide_btn_clicked()"><i class="fa-solid fa-eye show-hide-hide-btn"></i></button>
+                <button id="applicationtabs_show_btn" style="margin-bottom: 10px; padding: 0px; border: 0px; background: #FFFF; display: none;" onclick="applicationtabs_show_btn_clicked()"><i class="fa-solid fa-eye-slash show-hide-show-btn"></i></button>
+                <h2 style="flex: 1 1 100%;" class="tabs-container-header">Application Tabs</h2>
+            </div>
+            <div id="application-tabs" class="tab-content">
                 <div id="threepenny-display-messagecollector" class="active tab-pane">
                     <!-- Threepenny display used to display output of message collector-->
                 </div>
@@ -52,7 +64,7 @@
                     <!-- Threepenny display used to display output of simulation-->
                 </div>
             </div>
-            <div class="tab-buttons">
+            <div id="application-tab-buttons" class="tab-buttons">
                 <button class="tab-btn active" data-tab="threepenny-display-messagecollector">Msg collector</button>
                 <button class="tab-btn " data-tab="threepenny-display-runner">FSM Runner</button>
                 <button class="tab-btn" data-tab="threepenny-display-builder">Builder</button>
@@ -60,14 +72,36 @@
             </div>
         </div>
         
-        <div class="mermaid-section">
-            <h2>FSM live view</h2>
+        <div class="mermaid-section" id="mermaid-section">
+            <div style="display: flex; justify-items: center; gap: 10px">
+                <button id="mermaid_hide_btn" style="margin-bottom: 10px; padding: 0px; border: 0px; background: #FFFF;" onclick="mermaid_hide_btn_clicked()"><i class="fa-solid fa-eye show-hide-hide-btn"></i></button>
+                <button id="mermaid_show_btn" style="margin-bottom: 10px; padding: 0px; border: 0px; background: #FFFF; display: none;" onclick="mermaid_show_btn_clicked()"><i class="fa-solid fa-eye-slash show-hide-show-btn"></i></button>
+                <h2 style="flex: 1 1 100%;">FSM Live View</h2>
+            </div>
             <div id="mermaid-container" class="fade-in">Loading...</div>
+        </div>
+        
+        <div class="fsm-messages-section" id="fsm-messages-section">
+            <div style="display: flex; justify-items: center; gap: 10px">
+                <button id="mqtt_hide_btn" style="margin-bottom: 10px; padding: 0px; border: 0px; background: #FFFF;" onclick="mqtt_hide_btn_clicked()"><i class="fa-solid fa-eye show-hide-hide-btn"></i></button>
+                <button id="mqtt_show_btn" style="margin-bottom: 10px; padding: 0px; border: 0px; background: #FFFF; display: none;" onclick="mqtt_show_btn_clicked()"><i class="fa-solid fa-eye-slash show-hide-show-btn"></i></button>
+                <h2 style="flex: 1 1 100%;">FSM Messages Monitor</h2>
+            </div>
+            <div id="refresh-rate-container" class="refresh-rate-container">
+                <label for="refresh-rate-input">Refresh Rate:</label>
+                <input type="number" id="refresh-rate-input" class="refresh-rate-input" 
+                       value="20" min="1" max="10000" step="1">
+                <span class="refresh-rate-unit">ms</span>
+                <button id="clear-messages-btn" class="clear-messages-btn">Clear</button>
+            </div>
+            <textarea id="fsm-messages-display" class="fsm-messages-display" 
+                      readonly placeholder="Waiting for FSM messages on topic 'fsm/toenv'..."></textarea>
         </div>
     </div>
     
-    <!-- Load external JS file for Mermaid + MQTT -->
+    <!-- Load external JS files -->
     <script src="/static/mermaid-mqtt.js"></script>
+    <script src="/static/fsm-messages.js"></script>
     <script>
         // Tab switching functionality with multiple initialization attempts
         function setupTabs() {
@@ -184,6 +218,46 @@
         setTimeout(() => {
             setupPythonPathStorage();
         }, 1000);
+
+        function applicationtabs_hide_btn_clicked(){
+            document.getElementById("applicationtabs_show_btn").style.display = "";
+            document.getElementById("applicationtabs_hide_btn").style.display = "none";
+            document.getElementById("application-tabs").style.display = "none";
+            document.getElementById("application-tab-buttons").style.display = "none";
+        }
+
+        function applicationtabs_show_btn_clicked(){
+            document.getElementById("applicationtabs_show_btn").style.display = "none";
+            document.getElementById("applicationtabs_hide_btn").style.display = "";
+            document.getElementById("application-tabs").style.display = "";
+            document.getElementById("application-tab-buttons").style.display = "";
+        }
+
+        function mermaid_hide_btn_clicked(){
+            document.getElementById("mermaid_show_btn").style.display = "";
+            document.getElementById("mermaid_hide_btn").style.display = "none";
+            document.getElementById("mermaid-container").style.display = "none";
+        }
+
+        function mermaid_show_btn_clicked(){
+            document.getElementById("mermaid_show_btn").style.display = "none";
+            document.getElementById("mermaid_hide_btn").style.display = "";
+            document.getElementById("mermaid-container").style.display = "";
+        }
+
+        function mqtt_hide_btn_clicked(){
+            document.getElementById("mqtt_show_btn").style.display = "";
+            document.getElementById("mqtt_hide_btn").style.display = "none";
+            document.getElementById("refresh-rate-container").style.display = "none";
+            document.getElementById("fsm-messages-display").style.display = "none";
+        }
+
+        function mqtt_show_btn_clicked(){
+            document.getElementById("mqtt_show_btn").style.display = "none";
+            document.getElementById("mqtt_hide_btn").style.display = "";
+            document.getElementById("refresh-rate-container").style.display = "";
+            document.getElementById("fsm-messages-display").style.display = "";
+        }
     </script>
 </body>
 </html>
