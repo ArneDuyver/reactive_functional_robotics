@@ -3,14 +3,15 @@ module FsmFrontend where
 
 import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core
-import System.Process (std_out, readProcess, readCreateProcess, shell, createProcess, StdStream(CreatePipe), waitForProcess, terminateProcess, ProcessHandle, getPid)
+import System.Process (std_out, readProcess, readCreateProcess, shell, createProcess, StdStream(CreatePipe), waitForProcess, terminateProcess, ProcessHandle, getPid, getProcessExitCode)
 import System.IO (hSetBuffering, BufferMode(LineBuffering), hIsEOF, hGetLine, Handle, hClose)
-import Control.Monad (void)
+import Control.Monad (void, when)
 import Data.IORef
 import System.Exit (exitSuccess)
 import Control.Concurrent (forkIO, killThread, ThreadId, threadDelay)
 import Control.Exception (catch, SomeException)
 import System.FilePath (takeDirectory)
+import System.Directory (doesFileExist, removeFile)
 
 
 -- outputRef: Stores accumulated output lines from running processes
@@ -19,7 +20,7 @@ import System.FilePath (takeDirectory)
 -- handleRef: Reference to the stdout handle
 -- window: The Threepenny-UI window object for the web interface
 setup :: IORef [String] -> IORef (Maybe ProcessHandle) -> IORef (Maybe ThreadId) -> IORef (Maybe Handle) -> IORef (Maybe ProcessHandle) -> IORef (Maybe ThreadId) -> IORef (Maybe Handle) -> IORef (Maybe ProcessHandle) -> IORef (Maybe ThreadId) -> IORef (Maybe Handle) -> Window -> UI ()
-setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef mcHandleRef simPhRef simThreadRef simHandleRef window = do
+setup collectOutputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef mcHandleRef simPhRef simThreadRef simHandleRef window = do
     return window # set title "Reactive Functional Robotics"
 
     -- Load the homepage.html file and set it as the body content
@@ -102,28 +103,38 @@ setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef 
     let updateBuildDisplayHtml htmlText = element buildDisplayArea # set html htmlText
     let updateSimulationDisplayHtml htmlText = element simulationDisplayArea # set html htmlText
     
+    -- Helper functions that return UI () for cleanup
+    let updateCollectDisplayVoid txt = void $ updateCollectDisplay txt
+    let updateRunDisplayVoid txt = void $ updateRunDisplay txt
+    let updateSimulationDisplayVoid txt = void $ updateSimulationDisplay txt
+    
     let setButtonActive btnElement = element btnElement # set (attr "class") "btn btn-process active"
     let setButtonInactive btnElement = element btnElement # set (attr "class") "btn btn-process"
+    
+    -- Create separate output references for each process to avoid conflicts
+    runnerOutputRef <- liftIO $ newIORef []
+    buildOutputRef <- liftIO $ newIORef []
+    simOutputRef <- liftIO $ newIORef []
     
     -- Set up the event handlers for each button
     on UI.click collectButton $ \_ -> do
         setButtonActive collectButton
         updateCollectDisplay "Starting messageCollector..."
-        liftIO $ runProcessWithLiveOutput outputRef mcPhRef mcThreadRef mcHandleRef window "cabal run messageCollector" 
+        liftIO $ runProcessWithLiveOutput collectOutputRef mcPhRef mcThreadRef mcHandleRef window "cabal run messageCollector" 
             (\lines -> void $ runUI window (updateCollectDisplayHtml (unlines (map (\l -> "<div>" ++ l ++ "</div>") lines))))
         return ()
 
     on UI.click runButton $ \_ -> do
         setButtonActive runButton
         updateRunDisplay "Starting FsmRunner..."
-        liftIO $ runProcessWithLiveOutput outputRef runnerPhRef runnerThreadRef runnerhandleRef window "cabal run FsmRunner" 
+        liftIO $ runProcessWithLiveOutput runnerOutputRef runnerPhRef runnerThreadRef runnerhandleRef window "cabal run FsmRunner" 
             (\lines -> void $ runUI window (updateRunDisplayHtml (unlines (map (\l -> "<div>" ++ l ++ "</div>") lines))))
         return ()
 
     on UI.click buildButton $ \_ -> do
         setButtonActive buildButton
         updateBuildDisplay "Building FSM..."
-        liftIO $ runProcessWithLiveOutput outputRef runnerPhRef runnerThreadRef runnerhandleRef window "cabal run FsmBuilder" 
+        liftIO $ runProcessWithLiveOutput buildOutputRef runnerPhRef runnerThreadRef runnerhandleRef window "cabal run FsmBuilder" 
             (\lines -> void $ runUI window (updateBuildDisplayHtml (unlines (map (\l -> "<div>" ++ l ++ "</div>") lines))))
         return ()
 
@@ -135,16 +146,24 @@ setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef 
             Just input -> get value input
             Nothing -> return "C:\\Users\\Work\\OneDrive - KU Leuven\\Documents\\PhD\\Code\\1_Research\\1_turtlebot_copp_programs\\main.py"
         let command = "python \"" ++ pythonPath ++ "\""
-        liftIO $ runProcessWithLiveOutput outputRef simPhRef simThreadRef simHandleRef window command
+        liftIO $ runProcessWithLiveOutput simOutputRef simPhRef simThreadRef simHandleRef window command
             (\lines -> void $ runUI window (updateSimulationDisplayHtml (unlines (map (\l -> "<div>" ++ l ++ "</div>") lines))))
         return ()
 
     on UI.click clearButton $ \_ -> do
-        liftIO $ writeIORef outputRef []
+        liftIO $ writeIORef collectOutputRef []
+        liftIO $ writeIORef runnerOutputRef []
+        liftIO $ writeIORef buildOutputRef []
+        liftIO $ writeIORef simOutputRef []
         void $ updateCollectDisplay ""
         void $ updateRunDisplay ""
         void $ updateBuildDisplay ""
         void $ updateSimulationDisplay ""
+        -- Reset button states
+        setButtonInactive collectButton
+        setButtonInactive runButton
+        setButtonInactive buildButton
+        setButtonInactive simulationButton
 
     -- Event handler for gear button - opens states folder
     case gearButton of
@@ -175,6 +194,7 @@ setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef 
         setButtonInactive simulationButton
         -- Run cleanup in background thread to avoid blocking UI
         liftIO $ forkIO $ do
+            -- Simple cleanup for all processes
             -- Stop FsmRunner
             mph <- readIORef runnerPhRef
             mth <- readIORef runnerThreadRef
@@ -183,12 +203,10 @@ setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef 
               Just ph -> do
                 terminateProcess ph
                 putStrLn "Terminated FsmRunner process"
-                void $ runUI window (updateRunDisplay "FsmRunner process terminated successfully")
-              Nothing -> do
-                putStrLn "No FsmRunner process to terminate"
-                void $ runUI window (updateRunDisplay "No FsmRunner process to terminate")
+                void $ runUI window (updateRunDisplayVoid "FsmRunner process terminated")
+              Nothing -> void $ runUI window (updateRunDisplayVoid "No FsmRunner process to terminate")
             case mh of
-              Just h -> hClose h
+              Just h -> catch (hClose h) (\(_ :: SomeException) -> return ())
               Nothing -> return ()
             case mth of
               Just tid -> killThread tid
@@ -197,20 +215,28 @@ setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef 
             writeIORef runnerThreadRef Nothing
             writeIORef runnerhandleRef Nothing
             
-            -- Stop messageCollector
+            -- Stop messageCollector with graceful shutdown
             mcph <- readIORef mcPhRef
             mcth <- readIORef mcThreadRef
             mch  <- readIORef mcHandleRef
             case mcph of
               Just ph -> do
-                terminateProcess ph
-                putStrLn "Terminated messageCollector process"
-                void $ runUI window (updateCollectDisplay "messageCollector process terminated successfully")
-              Nothing -> do
-                putStrLn "No messageCollector process to terminate"
-                void $ runUI window (updateCollectDisplay "No messageCollector process to terminate")
+                -- Create stop signal file for graceful shutdown
+                catch (writeFile "messageCollector.stop" "") (\(_ :: SomeException) -> return ())
+                putStrLn "Created messageCollector stop signal, waiting for graceful shutdown..."
+                -- Wait a bit for graceful shutdown
+                threadDelay 2000000 -- 2 seconds
+                -- Check if still running, then force terminate
+                mExitCode <- getProcessExitCode ph
+                case mExitCode of
+                  Nothing -> do
+                    terminateProcess ph
+                    putStrLn "Force terminated messageCollector process"
+                  Just _ -> putStrLn "MessageCollector stopped gracefully"
+                void $ runUI window (updateCollectDisplayVoid "messageCollector process terminated")
+              Nothing -> void $ runUI window (updateCollectDisplayVoid "No messageCollector process to terminate")
             case mch of
-              Just h -> hClose h
+              Just h -> catch (hClose h) (\(_ :: SomeException) -> return ())
               Nothing -> return ()
             case mcth of
               Just tid -> killThread tid
@@ -219,7 +245,7 @@ setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef 
             writeIORef mcThreadRef Nothing
             writeIORef mcHandleRef Nothing
             
-            -- Stop simulation (send targeted Ctrl+C without affecting parent)
+            -- Stop simulation with graceful shutdown first
             simph <- readIORef simPhRef
             simth <- readIORef simThreadRef
             simh  <- readIORef simHandleRef
@@ -241,37 +267,35 @@ setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef 
                   return ())
                   (\e -> putStrLn $ "Failed to create stop.flag: " ++ show (e :: SomeException))
                 
-                -- Wait for graceful shutdown (check if process is still running)
+                -- Wait for graceful shutdown (5 seconds)
                 putStrLn "Waiting for graceful shutdown (5 seconds)..."
-                liftIO $ threadDelay 5000000 -- 5 seconds
+                threadDelay 5000000 -- 5 seconds
                 
-                -- Check if process is still running
-                mpid <- getPid ph
-                case mpid of
-                  Just pid -> do
-                    -- Try to check if process is still running by sending a null signal
-                    stillRunning <- catch (do
-                      _ <- readProcess "tasklist" ["/FI", "PID eq " ++ show pid] ""
-                      return True)
-                      (\(_ :: SomeException) -> return False)
-                    
-                    if stillRunning
-                      then do
-                        putStrLn $ "Process still running after graceful shutdown attempt, using force terminate on PID: " ++ show pid
+                -- Check if process is still running after graceful shutdown attempt
+                mExitCode <- getProcessExitCode ph
+                case mExitCode of
+                  Nothing -> do -- Still running, force terminate with taskkill
+                    mpid <- getPid ph
+                    case mpid of
+                      Just pid -> do
+                        putStrLn $ "Process still running after graceful shutdown attempt, using taskkill /F on PID: " ++ show pid
                         catch (do
                           _ <- readProcess "taskkill" ["/F", "/T", "/PID", show pid] ""
-                          putStrLn "Force termination completed"
+                          putStrLn "Force termination with taskkill completed"
                           return ())
-                          (\e -> putStrLn $ "Force terminate failed: " ++ show (e :: SomeException))
-                      else putStrLn "Process exited gracefully"
-                  Nothing -> putStrLn "Could not get process ID for status check"
-                putStrLn "Simulation process shutdown attempted"
-                void $ runUI window (updateSimulationDisplay "Simulation process terminated successfully \nNow stop the simulation in the simulator")
-              Nothing -> do
-                putStrLn "No simulation process to terminate"
-                void $ runUI window (updateSimulationDisplay "No simulation process to terminate \nNow stop the simulation in the simulator if necessary")
+                          (\e -> do
+                            putStrLn $ "taskkill failed: " ++ show (e :: SomeException)
+                            putStrLn "Falling back to terminateProcess"
+                            terminateProcess ph)
+                      Nothing -> do
+                        putStrLn "Could not get process ID, using terminateProcess"
+                        terminateProcess ph
+                  Just _ -> putStrLn "Process exited gracefully"
+                
+                void $ runUI window (updateSimulationDisplayVoid "Simulation process terminated \nNow stop the simulation in the simulator")
+              Nothing -> void $ runUI window (updateSimulationDisplayVoid "No simulation process to terminate")
             case simh of
-              Just h -> (hClose h) `catch` (\(_ :: SomeException) -> return ())
+              Just h -> catch (hClose h) (\(_ :: SomeException) -> return ())
               Nothing -> return ()
             case simth of
               Just tid -> killThread tid
@@ -310,38 +334,58 @@ runProcessSilent runnerPhRef runnerThreadRef runnerhandleRef cmd = do
     return ()
 
 runProcessWithLiveOutput :: IORef [String] -> IORef (Maybe ProcessHandle) -> IORef (Maybe ThreadId) -> IORef (Maybe Handle) -> Window -> String -> ([String] -> IO ()) -> IO ()
-runProcessWithLiveOutput outputRef runnerPhRef runnerThreadRef runnerhandleRef window cmd onLines = do
+runProcessWithLiveOutput outputRef processPhRef processThreadRef processHandleRef window cmd onLines = do
+    -- Simple cleanup: just kill existing thread and close handle if they exist
+    existingTh <- readIORef processThreadRef
+    case existingTh of
+      Just tid -> killThread tid
+      Nothing -> return ()
+    
+    existingH <- readIORef processHandleRef
+    case existingH of
+      Just h -> catch (hClose h) (\(_ :: SomeException) -> return ())
+      Nothing -> return ()
+    
+    -- Clear output and start fresh
+    writeIORef outputRef []
+    
+    -- Start new process
     let proc = shell cmd
     (_, Just hout, _, ph) <- createProcess proc { std_out = CreatePipe }
-    writeIORef runnerPhRef (Just ph)
-    writeIORef runnerhandleRef (Just hout)
+    writeIORef processPhRef (Just ph)
+    writeIORef processHandleRef (Just hout)
     hSetBuffering hout LineBuffering
+    
     tid <- forkIO $ do
       let loop = do
             eof <- hIsEOF hout
             if eof
               then return ()
               else do
-                line <- hGetLine hout
-                modifyIORef' outputRef (\ls -> ls ++ [line])
-                lines <- readIORef outputRef
-                onLines lines
+                line <- catch (hGetLine hout) (\(_ :: SomeException) -> return "")
+                when (line /= "") $ do
+                  modifyIORef' outputRef (\ls -> take 50 (ls ++ [line])) -- Keep only last 50 lines
+                  lines <- readIORef outputRef
+                  onLines lines
                 loop
       loop
-      _ <- waitForProcess ph
-      modifyIORef' outputRef (\ls -> ls ++ ["DONE"])
+      -- Process finished, clean up
+      catch (hClose hout) (\(_ :: SomeException) -> return ())
+      writeIORef processPhRef Nothing
+      writeIORef processThreadRef Nothing
+      writeIORef processHandleRef Nothing
+      -- Signal completion
+      modifyIORef' outputRef (\ls -> ls ++ ["Process completed"])
       lines <- readIORef outputRef
       onLines lines
-      writeIORef runnerPhRef Nothing
-      writeIORef runnerThreadRef Nothing
-      writeIORef runnerhandleRef Nothing
       return ()
-    writeIORef runnerThreadRef (Just tid)
+    
+    writeIORef processThreadRef (Just tid)
     return ()
 
 startFrontend :: IO ()
 startFrontend = do
-  outputRef <- newIORef []
+  collectOutputRef <- newIORef []
   runnerPhRef <- newIORef Nothing
   runnerThreadRef <- newIORef Nothing
   runnerhandleRef <- newIORef Nothing
@@ -351,4 +395,4 @@ startFrontend = do
   simPhRef <- newIORef Nothing
   simThreadRef <- newIORef Nothing
   simHandleRef <- newIORef Nothing
-  startGUI defaultConfig { jsStatic = Just "./FsmFrontend/static" } (setup outputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef mcHandleRef simPhRef simThreadRef simHandleRef)
+  startGUI defaultConfig { jsStatic = Just "./FsmFrontend/static" } (setup collectOutputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThreadRef mcHandleRef simPhRef simThreadRef simHandleRef)

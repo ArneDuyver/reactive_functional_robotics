@@ -3,10 +3,11 @@
 
 module MessageCollector where
 
-import Control.Concurrent (MVar, ThreadId, forkIO, newEmptyMVar, newMVar, putMVar, readChan, readMVar, takeMVar, threadDelay)
+import Control.Concurrent (MVar, ThreadId, forkIO, newEmptyMVar, newMVar, putMVar, readChan, readMVar, takeMVar, threadDelay, killThread)
 import Control.Concurrent.STM (STM, TBQueue, TVar, atomically, isEmptyTBQueue, lengthTBQueue, modifyTVar, newTBQueueIO, newTVarIO, readTBQueue, readTVar, readTVarIO, writeTBQueue, writeTVar)
 import Control.Concurrent.STM.TBQueue (tryReadTBQueue)
 import Control.Monad (when)
+import Control.Exception (catch, SomeException, bracket)
 import Data.Aeson (Object, Value, decode, encode)
 import Data.Aeson.Key qualified as K
 import Data.Aeson.KeyMap qualified as KM
@@ -24,6 +25,8 @@ import Network.MQTT.Types (Property, QoS, RetainHandling (DoNotSendOnSubscribe),
 import Network.URI (parseURI)
 import System.Environment (getArgs)
 import System.IO
+import Data.IORef (newIORef, readIORef, writeIORef, IORef)
+import System.Directory (doesFileExist, removeFile)
 
 subToTopic :: [Char] -> [Char] -> TBQueue String -> IO (([Either Network.MQTT.Types.SubErr QoS], [Property]), MQTTClient)
 subToTopic brokerUri topic eventChan = do
@@ -153,8 +156,21 @@ combineJsons msgs =
       merged = foldr KM.union KM.empty objects
    in B.unpack (encode merged)
 
+-- Check if shutdown was requested (simple file-based signal for Windows compatibility)
+checkShutdownSignal :: IO Bool
+checkShutdownSignal = do
+  exists <- doesFileExist "messageCollector.stop"
+  when exists $ do
+    putStrLn "Shutdown signal received, cleaning up..."
+    removeFile "messageCollector.stop"
+  return exists
+
 mqttCollector :: IO ()
 mqttCollector = do
+  -- Remove any existing stop signal file
+  stopFileExists <- doesFileExist "messageCollector.stop"
+  when stopFileExists $ removeFile "messageCollector.stop"
+  
   mqttConfigVals <- createMqttConfigFromFile ".env"
   let brokerUriStr = host mqttConfigVals ++ ":" ++ show (port mqttConfigVals)
       maybeUri = parseURI brokerUriStr
@@ -165,50 +181,73 @@ mqttCollector = do
   case maybeUri of
     Just uri -> do
       stopSignal <- newEmptyMVar
-      mqttConnection <- connectURI mqttConfig uri
-      chans <- startMqttListeners mqttConfigVals inputTopics stopSignal
+      result <- catch (do
+        mqttConnection <- connectURI mqttConfig uri
+        chans <- startMqttListeners mqttConfigVals inputTopics stopSignal
 
-      -- Track which required topics have sent at least one message
-      receivedRequiredTopics <- newTVarIO Set.empty
+        -- Track which required topics have sent at least one message
+        receivedRequiredTopics <- newTVarIO Set.empty
 
-      let loop lasts = do
-            msgs <- mapM (atomically . tryReadTBQueue) chans
-            let newLasts = zipWith (flip fromMaybe) msgs lasts
-                combinedMsg = combineJsons newLasts
-            pubToTopic mqttConnection (from_env_collection_topic mqttConfigVals) combinedMsg
-            if any (\msg -> "QUIT" `isPrefixOf` msg) newLasts
-              then return ()
-              else do
-                threadDelay 20000 -- Microseconds TODO: for testing use 1 second or so
-                loop newLasts
+        let loop lasts = do
+              -- Check for shutdown signal
+              shouldStop <- checkShutdownSignal
+              if shouldStop
+                then do
+                  putStrLn "Graceful shutdown initiated"
+                  return ()
+                else do
+                  msgs <- mapM (atomically . tryReadTBQueue) chans
+                  let newLasts = zipWith (flip fromMaybe) msgs lasts
+                      combinedMsg = combineJsons newLasts
+                  pubToTopic mqttConnection (from_env_collection_topic mqttConfigVals) combinedMsg
+                  if any (\msg -> "QUIT" `isPrefixOf` msg) newLasts
+                    then return ()
+                    else do
+                      threadDelay 20000 -- Microseconds TODO: for testing use 1 second or so
+                      loop newLasts
 
-      let waitForRequiredDevices lasts = do
-            msgs <- mapM (atomically . tryReadTBQueue) chans
-            let newLasts = zipWith (flip fromMaybe) msgs lasts
-                -- Check which topics have received messages (non-empty strings)
-                topicsWithMessages = [topic | (topic, msg) <- zip inputTopics newLasts, msg /= ""]
-                requiredTopicsWithMessages = filter (`elem` requiredTopics) topicsWithMessages
+        let waitForRequiredDevices lasts = do
+              -- Check for shutdown signal
+              shouldStop <- checkShutdownSignal
+              if shouldStop
+                then do
+                  putStrLn "Graceful shutdown during device wait"
+                  return ()
+                else do
+                  msgs <- mapM (atomically . tryReadTBQueue) chans
+                  let newLasts = zipWith (flip fromMaybe) msgs lasts
+                      -- Check which topics have received messages (non-empty strings)
+                      topicsWithMessages = [topic | (topic, msg) <- zip inputTopics newLasts, msg /= ""]
+                      requiredTopicsWithMessages = filter (`elem` requiredTopics) topicsWithMessages
 
-            -- Update the set of received required topics
-            atomically $ do
-              received <- readTVar receivedRequiredTopics
-              let updatedReceived = foldr Set.insert received requiredTopicsWithMessages
-              writeTVar receivedRequiredTopics updatedReceived
+                  -- Update the set of received required topics
+                  atomically $ do
+                    received <- readTVar receivedRequiredTopics
+                    let updatedReceived = foldr Set.insert received requiredTopicsWithMessages
+                    writeTVar receivedRequiredTopics updatedReceived
 
-            -- Check if all required topics have sent at least one message
-            currentReceived <- readTVarIO receivedRequiredTopics
-            let allRequiredReceived = all (`Set.member` currentReceived) requiredTopics
+                  -- Check if all required topics have sent at least one message
+                  currentReceived <- readTVarIO receivedRequiredTopics
+                  let allRequiredReceived = all (`Set.member` currentReceived) requiredTopics
 
-            if allRequiredReceived || null requiredTopics
-              then do
-                putStrLn "All required input devices have sent at least one message. Starting main loop..."
-                loop newLasts
-              else do
-                -- putStrLn $ "Waiting for required devices. Received: " ++ show (Set.toList currentReceived) ++ ", Required: " ++ show requiredTopics
-                threadDelay 100000 -- 100ms
-                waitForRequiredDevices newLasts
+                  if allRequiredReceived || null requiredTopics
+                    then do
+                      putStrLn "All required input devices have sent at least one message. Starting main loop..."
+                      loop newLasts
+                    else do
+                      -- putStrLn $ "Waiting for required devices. Received: " ++ show (Set.toList currentReceived) ++ ", Required: " ++ show requiredTopics
+                      threadDelay 100000 -- 100ms
+                      waitForRequiredDevices newLasts
 
-      waitForRequiredDevices (replicate (length chans) "")
-      normalDisconnect mqttConnection
-      putMVar stopSignal ()
+        waitForRequiredDevices (replicate (length chans) "")
+        putStrLn "Disconnecting MQTT client..."
+        normalDisconnect mqttConnection
+        putMVar stopSignal ()
+        putStrLn "MessageCollector stopped gracefully"
+        return ())
+        (\e -> do
+          putStrLn $ "MessageCollector error: " ++ show (e :: SomeException)
+          putMVar stopSignal ()
+          return ())
+      return ()
     Nothing -> error $ "Invalid broker URI: " ++ brokerUriStr
