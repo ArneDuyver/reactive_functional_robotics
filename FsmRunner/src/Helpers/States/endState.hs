@@ -1,24 +1,27 @@
 {-# LANGUAGE Arrows #-}
 
-module {{moduleName}}State where
+module Helpers.States.EndState where
 
 import Control.Concurrent
 import FRP.Yampa
 import Helpers.YampaHelper
-{{import_controllers}}
+import Helpers.Controllers.Turtlebot
+import Helpers.Controllers.Target
+import Helpers.Controllers.OutputState
+
 
 -- State behavior logic function - modify this to implement your state behavior
-stateBehaviour :: SF {{sf_input_type}} ({{output_type}}, String)
-stateBehaviour = proc {{sf_input_parameter}} -> do
+stateBehaviour :: SF TurtlebotState (Turtlebot, String)
+stateBehaviour = proc turtlebot -> do
   -- Create default types for Output
-  let {{output_variable}} = {{default_output}}
-      debugString = "STATE: {{stateNameLower}} :: "  -- Customize this debug message
+  let turtlebotOut = defaultTurtlebot
+      debugString = "STATE: end :: "  -- Customize this debug message
       -- Add your control logic here using the input parameters:
-  returnA -< ({{output_variable}}, debugString)
+  returnA -< (turtlebotOut, debugString)
 
 -- State transition logic function - determines next state based on inputs
-stateTransition :: SF {{sf_input_type}} (Bool, String)
-stateTransition = proc {{sf_input_parameter}} -> do
+stateTransition :: SF TurtlebotState (Bool, String)
+stateTransition = proc turtlebot -> do
   -- Add your transition logic here using the input parameters:
   -- Return (shouldSwitch, targetStateName)
   t <- time -< ()
@@ -48,18 +51,20 @@ stateTransition = proc {{sf_input_parameter}} -> do
 
 
 
-{{stateNameLower}}StateSF :: SF String OutputState
-{{stateNameLower}}StateSF = proc inputStr -> do
+endStateSF :: SF String OutputState
+endStateSF = proc inputStr -> do
   -- Decode inputs for string
-{{decode_critical_controllers}}
+  let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState inputStr
+  let (target, targetErrFlag, targetDebugMsg) = decodeTargetState inputStr
+
 
   -- Use the stateBehaviour SF
-  ({{output_variable}}, stateDebugString) <- stateBehaviour -< {{sf_input_variable}}
+  (turtlebotOut, stateDebugString) <- stateBehaviour -< turtlebot
  
   -- Create OutputData with state name
-  let outputData = OutputData { {{outputdata}}, state = "{{stateName}}" }
+  let outputData = OutputData { turtlebot = turtlebotOut, state = "End" }
   -- Create the error string
-  let (errFlag, debugMsg) = createErrFlagAndDebugMsg [ {{input_errors_debugs}} ]
+  let (errFlag, debugMsg) = createErrFlagAndDebugMsg [ ("turtlebot", turtlebotErrFlag, turtlebotDebugMsg), ("target", targetErrFlag, targetDebugMsg) ]
   -- Add your own values for debugging
   let specialDebugString = if errFlag then "DEBUG:: " ++ debugMsg else stateDebugString
   -- To stop simulation
@@ -72,13 +77,15 @@ stateTransition = proc {{sf_input_parameter}} -> do
 
   returnA -< outputState
 
-analyzer{{stateName}}State :: SF (String, OutputState) (Event (String))
-analyzer{{stateName}}State = proc (sfInput, sfOutput) -> do
+analyzerEndState :: SF (String, OutputState) (Event (String))
+analyzerEndState = proc (sfInput, sfOutput) -> do
   -- Decode inputs for analysis
-{{decode_critical_controllers_analyzer}}
+  let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState sfInput
+  let (target, targetErrFlag, targetDebugMsg) = decodeTargetState sfInput
+
 
   -- Determine next state using transition logic
-  (shouldSwitch, targetStateName) <- stateTransition -< {{sf_input_variable_analyzer}}
+  (shouldSwitch, targetStateName) <- stateTransition -< turtlebot
   
   e <- edge -< shouldSwitch
   let eTagged = tag e targetStateName
