@@ -31,8 +31,9 @@ stateTransition :: SF TurtlebotState (Bool, String)
 stateTransition = proc turtlebot -> do
   -- Add your transition logic here using the input parameters:
   -- Return (shouldSwitch, targetStateName)
-  let shouldSwitch = False  -- Change this condition based on your logic
-      targetState = "newStateName"  -- Target state name
+  t <- time -< ()
+  let shouldSwitch = t > 3  -- Change this condition based on your logic
+      targetState = "endState"  -- Target state name
       -- Example logic based on sensor readings:
       -- shouldSwitch = (value turtlebot) > 0.8  -- Switch when sensor reading is high
       -- targetState = if (value turtlebot) > 0.8 then "FastState" 
