@@ -14,7 +14,6 @@ stateBehaviour = proc {{sf_input_parameter}} -> do
   let {{output_variable}} = {{default_output}}
       debugString = "STATE: {{stateNameLower}} :: "  -- Customize this debug message
       -- Add your control logic here using the input parameters:
-      {{control_logic_comments}}
   returnA -< ({{output_variable}}, debugString)
 
 -- State transition logic function - determines next state based on inputs
@@ -25,7 +24,6 @@ stateTransition = proc {{sf_input_parameter}} -> do
   let shouldSwitch = False  -- Change this condition based on your logic
       targetState = "newStateName"  -- Target state name
       -- Example logic based on sensor readings:
-{{transition_logic_comments}}
   returnA -< (shouldSwitch, targetState)
 
 

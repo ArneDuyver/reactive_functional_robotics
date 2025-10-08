@@ -378,10 +378,10 @@ writeStateFile controllerNames controllers outputControllers st = do
                     "output_type" Aeson..= outputType,
                     "output_variable" Aeson..= outputVariable,
                     "default_output" Aeson..= defaultOutput,
-                    "control_logic_comments" Aeson..= controlLogicComments,
+                    -- "control_logic_comments" Aeson..= controlLogicComments,
                     "decode_critical_controllers_analyzer" Aeson..= criticalDecodesAnalyzer,
                     "input_variables_analyzer" Aeson..= inputVariablesAnalyzer,
-                    "transition_logic_comments" Aeson..= transitionLogicComments,
+                    -- "transition_logic_comments" Aeson..= transitionLogicComments,
                     -- New SF template variables
                     "sf_input_type" Aeson..= sfInputType,
                     "sf_input_parameter" Aeson..= sfInputParameter,
