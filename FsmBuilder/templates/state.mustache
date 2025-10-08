@@ -13,7 +13,7 @@ stateBehaviour = proc {{sf_input_parameter}} -> do
   -- Create default types for Output
   let {{output_variable}} = {{default_output}}
       debugString = "STATE: {{stateNameLower}} :: "  -- Customize this debug message
-      -- Add your control logic here using the input parameters:
+      -- Add your control logic here using the input parameters
   returnA -< ({{output_variable}}, debugString)
 
 -- State transition logic function - determines next state based on inputs
@@ -21,10 +21,9 @@ stateTransition :: SF {{sf_input_type}} (Bool, String)
 stateTransition = proc {{sf_input_parameter}} -> do
   -- Add your transition logic here using the input parameters:
   -- Return (shouldSwitch, targetStateName)
-  t <- time -< ()
-  let shouldSwitch = t > 5  -- Change this condition based on your own logic
-      targetState = "newStateName"  -- Change this to the desired stateName
-      -- Example logic based on sensor readings:
+  let shouldSwitch = False  -- Change this condition based on your logic
+      targetState = "newStateName"  -- Target state name
+      -- Add your transition logic here based on the input parameters
   returnA -< (shouldSwitch, targetState)
 
 

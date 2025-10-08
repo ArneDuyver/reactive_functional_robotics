@@ -189,29 +189,41 @@ generateDefaultOutput outputControllers =
     [controller] -> "default" ++ capitalize (OB.rawOutputControllerName controller)
     _ -> "defaultTurtlebot" -- Default fallback
 
--- Generate SF input type (for single controller case, just the controller type)
+-- Generate SF input type (for multiple controller case, create tuple)
 generateSFInputType :: [IB.RawControllerInputState] -> String
 generateSFInputType controllers =
   let criticalControllers = filter IB.rawCritical controllers
    in case criticalControllers of
         [controller] -> capitalize (IB.rawControllerName controller) ++ "State"
-        _ -> "TurtlebotState" -- Default fallback
+        controllers -> "(" ++ intercalate ", " (map (\c -> capitalize (IB.rawControllerName c) ++ "State") controllers) ++ ")"
+        [] -> "TurtlebotState" -- Default fallback
 
--- Generate SF input parameter (for single controller case, just the controller name)
+-- Generate SF input parameter (for multiple controller case, create tuple pattern)
 generateSFInputParameter :: [IB.RawControllerInputState] -> String
 generateSFInputParameter controllers =
   let criticalControllers = filter IB.rawCritical controllers
    in case criticalControllers of
         [controller] -> IB.rawControllerName controller
-        _ -> "turtlebot" -- Default fallback
+        controllers -> "(" ++ intercalate ", " (map IB.rawControllerName controllers) ++ ")"
+        [] -> "turtlebot" -- Default fallback
 
--- Generate SF input variable for function calls (same as parameter)
+-- Generate SF input variable for function calls (create tuple from decoded values)
 generateSFInputVariable :: [IB.RawControllerInputState] -> String
-generateSFInputVariable = generateSFInputParameter
+generateSFInputVariable controllers =
+  let criticalControllers = filter IB.rawCritical controllers
+   in case criticalControllers of
+        [controller] -> IB.rawControllerName controller
+        controllers -> "(" ++ intercalate ", " (map IB.rawControllerName controllers) ++ ")"
+        [] -> "turtlebot" -- Default fallback
 
 -- Generate SF input variable for analyzer function calls
 generateSFInputVariableAnalyzer :: [IB.RawControllerInputState] -> String
-generateSFInputVariableAnalyzer = generateSFInputParameter
+generateSFInputVariableAnalyzer controllers =
+  let criticalControllers = filter IB.rawCritical controllers
+   in case criticalControllers of
+        [controller] -> IB.rawControllerName controller
+        controllers -> "(" ++ intercalate ", " (map IB.rawControllerName controllers) ++ ")"
+        [] -> "turtlebot" -- Default fallback
 
 -- Generate control logic comments
 generateControlLogicComments :: [IB.RawControllerInputState] -> [OB.RawControllerOutputState] -> String
@@ -378,10 +390,8 @@ writeStateFile controllerNames controllers outputControllers st = do
                     "output_type" Aeson..= outputType,
                     "output_variable" Aeson..= outputVariable,
                     "default_output" Aeson..= defaultOutput,
-                    -- "control_logic_comments" Aeson..= controlLogicComments,
                     "decode_critical_controllers_analyzer" Aeson..= criticalDecodesAnalyzer,
                     "input_variables_analyzer" Aeson..= inputVariablesAnalyzer,
-                    -- "transition_logic_comments" Aeson..= transitionLogicComments,
                     -- New SF template variables
                     "sf_input_type" Aeson..= sfInputType,
                     "sf_input_parameter" Aeson..= sfInputParameter,

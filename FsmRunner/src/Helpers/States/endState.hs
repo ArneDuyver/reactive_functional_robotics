@@ -11,23 +11,22 @@ import Helpers.Controllers.OutputState
 
 
 -- State behavior logic function - modify this to implement your state behavior
-stateBehaviour :: SF TurtlebotState (Turtlebot, String)
-stateBehaviour = proc turtlebot -> do
+stateBehaviour :: SF (TurtlebotState, TargetState) (Turtlebot, String)
+stateBehaviour = proc (turtlebot, target) -> do
   -- Create default types for Output
   let turtlebotOut = defaultTurtlebot
       debugString = "STATE: end :: "  -- Customize this debug message
-      -- Add your control logic here using the input parameters:
+      -- Add your control logic here using the input parameters
   returnA -< (turtlebotOut, debugString)
 
 -- State transition logic function - determines next state based on inputs
-stateTransition :: SF TurtlebotState (Bool, String)
-stateTransition = proc turtlebot -> do
+stateTransition :: SF (TurtlebotState, TargetState) (Bool, String)
+stateTransition = proc (turtlebot, target) -> do
   -- Add your transition logic here using the input parameters:
   -- Return (shouldSwitch, targetStateName)
-  t <- time -< ()
-  let shouldSwitch = t > 5  -- Change this condition based on your own logic
-      targetState = "newStateName"  -- Change this to the desired stateName
-      -- Example logic based on sensor readings:
+  let shouldSwitch = False  -- Change this condition based on your logic
+      targetState = "newStateName"  -- Target state name
+      -- Add your transition logic here based on the input parameters
   returnA -< (shouldSwitch, targetState)
 
 
@@ -59,7 +58,7 @@ endStateSF = proc inputStr -> do
 
 
   -- Use the stateBehaviour SF
-  (turtlebotOut, stateDebugString) <- stateBehaviour -< turtlebot
+  (turtlebotOut, stateDebugString) <- stateBehaviour -< (turtlebot, target)
  
   -- Create OutputData with state name
   let outputData = OutputData { turtlebot = turtlebotOut, state = "End" }
@@ -85,7 +84,7 @@ analyzerEndState = proc (sfInput, sfOutput) -> do
 
 
   -- Determine next state using transition logic
-  (shouldSwitch, targetStateName) <- stateTransition -< turtlebot
+  (shouldSwitch, targetStateName) <- stateTransition -< (turtlebot, target)
   
   e <- edge -< shouldSwitch
   let eTagged = tag e targetStateName

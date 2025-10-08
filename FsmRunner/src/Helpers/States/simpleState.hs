@@ -10,18 +10,18 @@ import Helpers.Controllers.Target
 import Helpers.Controllers.OutputState
 
 -- State behavior logic function - modify this to implement your state behavior
-stateBehaviour :: SF TurtlebotState (Turtlebot, String)
-stateBehaviour = proc turtlebot -> do
+stateBehaviour :: SF (TurtlebotState, TargetState) (Turtlebot, String)
+stateBehaviour = proc (turtlebot, target) -> do
   let turtlebotOut = Turtlebot {
                       motorLeft = fst (translationalAndRotationalVelocitiesToWheelVelocities  0.5 0.0 0.160 0.033),
                       motorRight = snd (translationalAndRotationalVelocitiesToWheelVelocities  0.5 0.0 0.160 0.033)
                     }
-      debugString = "STATE: simple :: " ++ show (frontSensor turtlebot)
+      debugString = "STATE: simple :: " ++ show (frontSensor turtlebot) ++ " target: " ++ show (xcoordinate target)
   returnA -< (turtlebotOut, debugString)
 
 -- State transition logic function - determines next state based on inputs
-stateTransition :: SF TurtlebotState (Bool, String)
-stateTransition = proc turtlebot -> do
+stateTransition :: SF (TurtlebotState, TargetState) (Bool, String)
+stateTransition = proc (turtlebot, target) -> do
   t <- time -< ()
   let shouldSwitch = t > 2  
       targetState = "newStateName"  
@@ -56,7 +56,7 @@ simpleStateSF = proc inputStr -> do
 
 
   -- Use the stateBehaviour SF
-  (turtlebotOut, stateDebugString) <- stateBehaviour -< turtlebot
+  (turtlebotOut, stateDebugString) <- stateBehaviour -< (turtlebot, target)
  
   -- Create OutputData with state name
   let outputData = OutputData { turtlebot = turtlebotOut, state = "Simple" }
@@ -82,7 +82,7 @@ analyzerSimpleState = proc (sfInput, sfOutput) -> do
 
 
   -- Determine next state using transition logic
-  (shouldSwitch, targetStateName) <- stateTransition -< turtlebot
+  (shouldSwitch, targetStateName) <- stateTransition -< (turtlebot, target)
   
   e <- edge -< shouldSwitch
   let eTagged = tag e targetStateName
