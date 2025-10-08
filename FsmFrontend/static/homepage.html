@@ -24,7 +24,7 @@
                 <!-- Threepenny buttons will be added here -->
             </div>
             <div class="button-row-right">
-                <button class="btn btn-python" id="python-btn" title="Change script path"><i class="fa-brands fa-python"></i></button>
+                <button class="btn btn-python" id="python-btn" title="Change script path" onclick="change_python_path()"><i class="fa-brands fa-python"></i></button>
                 <form target="_blank" action="https://app.diagrams.net/?src=about">
                     <button class="btn drawio-logo" type="submit" value="Go to draw.io" title="Open draw.io">
                         <img src="/static/drawio_logo.png" alt="draw.io" class="drawio-logo-img">
@@ -36,7 +36,7 @@
             </div>
         </div>
         
-        <div class="python-path-container">
+        <div class="python-path-container" style="display: none">
             <label for="python-path-input">Simulation Script Path:</label>
             <input type="text" id="python-path-input" class="python-path-input" 
                    placeholder="Enter path to Python script (e.g., C:\path\to\your\script.py)" 
@@ -258,6 +258,18 @@
             document.getElementById("refresh-rate-container").style.display = "";
             document.getElementById("fsm-messages-display").style.display = "";
         }
+
+        function change_python_path(){
+            var currentpath = document.getElementById("python-path-input").value;
+            var promptOutput = prompt("You can change the path to the python file here", currentpath);
+            if (promptOutput !== null) {
+                document.getElementById("python-path-input").value = promptOutput;
+                console.log("Value of python-path-input changed to", document.getElementById("python-path-input").value);
+            } else {
+                console.log("Changing python path canceled");
+            }
+        }
+        
     </script>
 </body>
 </html>
