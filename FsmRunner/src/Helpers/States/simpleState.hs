@@ -6,16 +6,16 @@ import Control.Concurrent
 import FRP.Yampa
 import Helpers.YampaHelper
 import Helpers.Controllers.Turtlebot
+import Helpers.Controllers.Target
 import Helpers.Controllers.OutputState
 
 
-
-
 -- State behavior logic function - modify this to implement your state behavior
-stateBehaviour :: TurtlebotState -> Turtlebot
-stateBehaviour turtlebot = turtlebotOut
+stateBehaviour :: SF TurtlebotState (Turtlebot, String)
+stateBehaviour = proc turtlebot -> do
   -- Create default types for Output
-  where turtlebotOut = defaultTurtlebot
+  let turtlebotOut = defaultTurtlebot
+      debugString = "STATE: simple :: "  -- Customize this debug message
       -- Add your control logic here using the input parameters:
             -- turtlebotOut' = turtlebotOut { 
       --   motorLeft = if (value turtlebot) > 0.5 then 1.0 else 0.0,
@@ -24,10 +24,11 @@ stateBehaviour turtlebot = turtlebotOut
       -- Access input sensor data like:
       -- - turtlebot sensor: (value turtlebot) gives you the sensor reading
       -- - turtlebot state: use existing parameter for feedback control
+  returnA -< (turtlebotOut, debugString)
 
 -- State transition logic function - determines next state based on inputs
-stateTransition :: TurtlebotState -> (Bool, String)
-stateTransition turtlebot = 
+stateTransition :: SF TurtlebotState (Bool, String)
+stateTransition = proc turtlebot -> do
   -- Add your transition logic here using the input parameters:
   -- Return (shouldSwitch, targetStateName)
   let shouldSwitch = False  -- Change this condition based on your logic
@@ -40,8 +41,8 @@ stateTransition turtlebot =
       --
       -- Access input data:
       -- - (value turtlebot): Get the sensor reading from turtlebot controller
-      -- - turtlebot: Access previous turtlebot state for feedback-based decisions
-  in (shouldSwitch, targetState)
+      -- - target: Access target state for feedback-based decisions
+  returnA -< (shouldSwitch, targetState)
 
 
 
@@ -68,16 +69,18 @@ simpleStateSF :: SF String OutputState
 simpleStateSF = proc inputStr -> do
   -- Decode inputs for string
   let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState inputStr
+  let (target, targetErrFlag, targetDebugMsg) = decodeTargetState inputStr
 
 
-  let turtlebotOut = stateBehaviour turtlebot
+  -- Use the stateBehaviour SF
+  (turtlebotOut, stateDebugString) <- stateBehaviour -< turtlebot
  
   -- Create OutputData with state name
   let outputData = OutputData { turtlebot = turtlebotOut, state = "Simple" }
   -- Create the error string
-  let (errFlag, debugMsg) = createErrFlagAndDebugMsg [ ("turtlebot", turtlebotErrFlag, turtlebotDebugMsg) ]
+  let (errFlag, debugMsg) = createErrFlagAndDebugMsg [ ("turtlebot", turtlebotErrFlag, turtlebotDebugMsg), ("target", targetErrFlag, targetDebugMsg) ]
   -- Add your own values for debugging
-  let specialDebugString = if errFlag then "DEBUG:: " ++ debugMsg else "STATE: simple :: "
+  let specialDebugString = if errFlag then "DEBUG:: " ++ debugMsg else stateDebugString
   -- To stop simulation
   let debugString
         | errFlag = "STOPSIM " ++ specialDebugString
@@ -92,11 +95,12 @@ analyzerSimpleState :: SF (String, OutputState) (Event (String))
 analyzerSimpleState = proc (sfInput, sfOutput) -> do
   -- Decode inputs for analysis
   let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState sfInput
+  let (target, targetErrFlag, targetDebugMsg) = decodeTargetState sfInput
 
 
   -- Determine next state using transition logic
-  let (shouldSwitch, targetStateName) = stateTransition turtlebot
+  (shouldSwitch, targetStateName) <- stateTransition -< turtlebot
   
-  t <- time -< () 
-  e <- edgeTag "newStateName" -< t > 4 
-  returnA -< e
+  e <- edge -< shouldSwitch
+  let eTagged = tag e targetStateName
+  returnA -< eTagged

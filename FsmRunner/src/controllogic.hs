@@ -6,6 +6,7 @@ import Control.Concurrent
 import FRP.Yampa
 import Helpers.YampaHelper
 import Helpers.Controllers.Turtlebot
+import Helpers.Controllers.Target
 import Helpers.Controllers.OutputState
 
 import Helpers.States.ErrorState

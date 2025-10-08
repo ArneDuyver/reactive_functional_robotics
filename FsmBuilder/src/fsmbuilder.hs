@@ -189,6 +189,30 @@ generateDefaultOutput outputControllers =
     [controller] -> "default" ++ capitalize (OB.rawOutputControllerName controller)
     _ -> "defaultTurtlebot" -- Default fallback
 
+-- Generate SF input type (for single controller case, just the controller type)
+generateSFInputType :: [IB.RawControllerInputState] -> String
+generateSFInputType controllers =
+  let criticalControllers = filter IB.rawCritical controllers
+   in case criticalControllers of
+        [controller] -> capitalize (IB.rawControllerName controller) ++ "State"
+        _ -> "TurtlebotState" -- Default fallback
+
+-- Generate SF input parameter (for single controller case, just the controller name)
+generateSFInputParameter :: [IB.RawControllerInputState] -> String
+generateSFInputParameter controllers =
+  let criticalControllers = filter IB.rawCritical controllers
+   in case criticalControllers of
+        [controller] -> IB.rawControllerName controller
+        _ -> "turtlebot" -- Default fallback
+
+-- Generate SF input variable for function calls (same as parameter)
+generateSFInputVariable :: [IB.RawControllerInputState] -> String
+generateSFInputVariable = generateSFInputParameter
+
+-- Generate SF input variable for analyzer function calls
+generateSFInputVariableAnalyzer :: [IB.RawControllerInputState] -> String
+generateSFInputVariableAnalyzer = generateSFInputParameter
+
 -- Generate control logic comments
 generateControlLogicComments :: [IB.RawControllerInputState] -> [OB.RawControllerOutputState] -> String
 generateControlLogicComments inputControllers outputControllers =
@@ -312,7 +336,7 @@ writeStateFile controllerNames controllers outputControllers st = do
       defaultOutputTypes = generateDefaultOutputTypes outputControllers
       outputDataFields = generateOutputDataFields outputControllers
       inputErrorsDebugs = generateInputErrorsDebugs controllers
-      -- New template variables
+      -- Original template variables (kept for compatibility)
       inputTypes = generateInputTypes controllers
       inputParameters = generateInputParameters controllers
       inputVariables = generateInputVariables controllers
@@ -323,6 +347,11 @@ writeStateFile controllerNames controllers outputControllers st = do
       criticalDecodesAnalyzer = generateCriticalControllerDecodesAnalyzer controllers
       inputVariablesAnalyzer = generateInputVariablesAnalyzer controllers
       transitionLogicComments = generateTransitionLogicComments controllers
+      -- New SF template variables
+      sfInputType = generateSFInputType controllers
+      sfInputParameter = generateSFInputParameter controllers
+      sfInputVariable = generateSFInputVariable controllers
+      sfInputVariableAnalyzer = generateSFInputVariableAnalyzer controllers
   
   fileExists <- doesFileExist fileName
   if fileExists
@@ -342,7 +371,7 @@ writeStateFile controllerNames controllers outputControllers st = do
                     "default_outputtypes" Aeson..= defaultOutputTypes,
                     "outputdata" Aeson..= outputDataFields,
                     "input_errors_debugs" Aeson..= inputErrorsDebugs,
-                    -- New template variables
+                    -- Original template variables (kept for compatibility)
                     "input_types" Aeson..= inputTypes,
                     "input_parameters" Aeson..= inputParameters,
                     "input_variables" Aeson..= inputVariables,
@@ -352,7 +381,12 @@ writeStateFile controllerNames controllers outputControllers st = do
                     "control_logic_comments" Aeson..= controlLogicComments,
                     "decode_critical_controllers_analyzer" Aeson..= criticalDecodesAnalyzer,
                     "input_variables_analyzer" Aeson..= inputVariablesAnalyzer,
-                    "transition_logic_comments" Aeson..= transitionLogicComments
+                    "transition_logic_comments" Aeson..= transitionLogicComments,
+                    -- New SF template variables
+                    "sf_input_type" Aeson..= sfInputType,
+                    "sf_input_parameter" Aeson..= sfInputParameter,
+                    "sf_input_variable" Aeson..= sfInputVariable,
+                    "sf_input_variable_analyzer" Aeson..= sfInputVariableAnalyzer
                   ]
               rendered = Mustache.substitute template context
           -- replace HTML entities with real characters and write

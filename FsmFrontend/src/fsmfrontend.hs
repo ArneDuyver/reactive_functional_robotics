@@ -144,7 +144,7 @@ setup collectOutputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThr
         -- Get the Python path from the input field
         pythonPath <- case pythonPathInput of
             Just input -> get value input
-            Nothing -> return "C:\\Users\\Work\\OneDrive - KU Leuven\\Documents\\PhD\\Code\\1_Research\\1_turtlebot_copp_programs\\main.py"
+            Nothing -> return "..\\complete.py"
         let command = "python \"" ++ pythonPath ++ "\""
         liftIO $ runProcessWithLiveOutput simOutputRef simPhRef simThreadRef simHandleRef window command
             (\lines -> void $ runUI window (updateSimulationDisplayHtml (unlines (map (\l -> "<div>" ++ l ++ "</div>") lines))))
@@ -255,7 +255,7 @@ setup collectOutputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThr
                 -- Get the Python path from the input field (or use default)
                 pythonPath <- case pythonPathInput of
                   Just input -> runUI window $ get value input
-                  Nothing -> return "C:\\Users\\Work\\OneDrive - KU Leuven\\Documents\\PhD\\Code\\1_Research\\1_turtlebot_copp_programs\\main.py"
+                  Nothing -> return "..\\complete.py"
                 
                 -- Extract directory from Python file path and create stop.flag there
                 let pythonDir = takeDirectory pythonPath

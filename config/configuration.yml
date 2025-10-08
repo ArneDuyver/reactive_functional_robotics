@@ -18,3 +18,20 @@ controllers:
             type: Double
             default: 0.0
 
+  - target:
+      name: target
+      critical: true
+      inputs:
+        - xcoordinate:
+            name: xcoordinate
+            type: Double
+            default: 9999
+        - ycoordinate:
+            name: ycoordinate
+            type: Double
+            default: 9999
+        - width:
+            name: width
+            type: Double
+            default: 9999
+

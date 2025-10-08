@@ -40,7 +40,7 @@
             <label for="python-path-input">Simulation Script Path:</label>
             <input type="text" id="python-path-input" class="python-path-input" 
                    placeholder="Enter path to Python script (e.g., C:\path\to\your\script.py)" 
-                   value="C:\turtlebot_sim\main.py">
+                   value="..\\complete.py">
         </div>
         
         <div class="tabs-container" id="tabs-container">
@@ -264,6 +264,7 @@
             var promptOutput = prompt("You can change the path to the python file here", currentpath);
             if (promptOutput !== null) {
                 document.getElementById("python-path-input").value = promptOutput;
+                localStorage.setItem('rfr-python-path', promptOutput);
                 console.log("Value of python-path-input changed to", document.getElementById("python-path-input").value);
             } else {
                 console.log("Changing python path canceled");
