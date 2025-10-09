@@ -78,8 +78,8 @@ sense queue currentTimeVar _ = do
 --   in debugString
 
 -- Pos vel is forward, pos rot is anti-clockwise turn
-translationalAndRotationalVelocitiesToWheelVelocities :: Double -> Double -> Double -> Double -> (Double, Double)
-translationalAndRotationalVelocitiesToWheelVelocities transVel rotVel wheelDistanceInM wheelRadiusInM =
+translationalAndRotationalVelocitiesToWheelVelocities :: Double -> Double -> (Double, Double)
+translationalAndRotationalVelocitiesToWheelVelocities transVel rotVel =
   let -- Clamp input velocities to allowed ranges
       rotVelInverse = -rotVel
       clampedTrans = clamp (-maxTrans) maxTrans transVel
@@ -88,6 +88,8 @@ translationalAndRotationalVelocitiesToWheelVelocities transVel rotVel wheelDista
       clampedRot = clamp (-maxRot) maxRot rotVelInverse
         where maxRot = 3.14 * 2
       
+      wheelDistanceInM = 0.160
+      wheelRadiusInM = 0.033
       -- Correct calculation using full wheel distance
       wheelDist = wheelDistanceInM
       leftVelRaw = (clampedTrans + (clampedRot * wheelDist / 2)) / wheelRadiusInM 
@@ -102,9 +104,11 @@ translationalAndRotationalVelocitiesToWheelVelocities transVel rotVel wheelDista
     clamp :: Double -> Double -> Double -> Double
     clamp lower upper = max lower . min upper
 
-getTranslationalAndRotationalVelocities :: Double -> Double -> Double -> Double -> (Double, Double)
-getTranslationalAndRotationalVelocities motorVelLeftRadSec motorVelRightRadSec wheelDistanceInM wheelRadiusInM = (vel, rot)
-  where v_l = motorVelLeftRadSec * wheelRadiusInM
+getTranslationalAndRotationalVelocities :: Double -> Double -> (Double, Double)
+getTranslationalAndRotationalVelocities motorVelLeftRadSec motorVelRightRadSec = (vel, rot)
+  where wheelDistanceInM = 0.160
+        wheelRadiusInM = 0.033
+        v_l = motorVelLeftRadSec * wheelRadiusInM
         v_r = motorVelRightRadSec * wheelRadiusInM
         vel = (v_r + v_l)/2
         rot = ((-1)*(v_r - v_l))/wheelDistanceInM
@@ -114,3 +118,9 @@ degreesToRadians deg = (deg / 180) * pi
 
 radiansToDegrees :: Double -> Double
 radiansToDegrees rad = (rad / pi) * 180
+
+-- | Calculate the Euclidean distance between two points in meters
+-- Takes two points (x1, y1) and (x2, y2) and returns the distance in meters
+distanceBetweenPoints :: (Double, Double) -> (Double, Double) -> Double
+distanceBetweenPoints (x1, y1) (x2, y2) = sqrt ((x2 - x1)^2 + (y2 - y1)^2)
+

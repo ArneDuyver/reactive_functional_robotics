@@ -14,8 +14,8 @@ import Data.Maybe (fromMaybe)
 import Data.Text (pack)
 
 data TargetState = TargetState
-  { xcoordinate :: Double
-  , ycoordinate :: Double
+  { xCoorTarget :: Double
+  , yCoorTarget :: Double
   , width :: Double
   }
   deriving (Show, Generic)
@@ -25,9 +25,9 @@ instance FromJSON TargetState
 -- Default Target state
 defaultTargetState :: TargetState
 defaultTargetState = TargetState
-  { xcoordinate = 9999
-  , ycoordinate = 9999
-  , width = 9999
+  { xCoorTarget = -1
+  , yCoorTarget = -1
+  , width = -1
   }
 
 decodeTargetState :: String -> (TargetState, Bool, String)

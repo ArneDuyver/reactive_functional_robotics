@@ -1,6 +1,6 @@
 {-# LANGUAGE Arrows #-}
 
-module Helpers.States.SimpleState where
+module Helpers.States.WallFollowState where
 
 import Control.Concurrent
 import FRP.Yampa
@@ -13,18 +13,20 @@ import Helpers.Controllers.OutputState
 stateBehaviour :: SF (TurtlebotState, TargetState) (Turtlebot, String)
 stateBehaviour = proc (turtlebot, target) -> do
   let turtlebotOut = Turtlebot {
-                      motorLeft = fst (translationalAndRotationalVelocitiesToWheelVelocities  0.1 0.0),
-                      motorRight = snd (translationalAndRotationalVelocitiesToWheelVelocities  0.1 0.0)
+                      motorLeft = fst (translationalAndRotationalVelocitiesToWheelVelocities  0.4 0.0),
+                      motorRight = snd (translationalAndRotationalVelocitiesToWheelVelocities  0.4 0.0)
                     }
-      debugString = "STATE: simple :: " ++ show (frontSensor turtlebot) ++ " target: " ++ show (xcoordinate target)
+  let distanceToTarget = distanceBetweenPoints ((xCoor turtlebot), (yCoor turtlebot)) ((xCoorTarget target), (yCoorTarget target))
+  let shouldSwitch = distanceToTarget < (width target)
+      debugString = "STATE: wallFollow :: "  ++ show distanceToTarget ++ " | " ++ show (width target) ++ "|" ++ show ((xCoor turtlebot), (yCoor turtlebot)) ++ "|" ++ show ((xCoorTarget target), (yCoorTarget target))
   returnA -< (turtlebotOut, debugString)
 
 -- State transition logic function - determines next state based on inputs
 stateTransition :: SF (TurtlebotState, TargetState) (Bool, String)
 stateTransition = proc (turtlebot, target) -> do
-  t <- time -< ()
-  let shouldSwitch = t > 20  
-      targetState = "newStateName"  
+  let distanceToTarget = distanceBetweenPoints ((xCoor turtlebot), (yCoor turtlebot)) ((xCoorTarget target), (yCoorTarget target))
+  let shouldSwitch = distanceToTarget < (width target)
+      targetState = "endState"
   returnA -< (shouldSwitch, targetState)
 
 
@@ -48,8 +50,8 @@ stateTransition = proc (turtlebot, target) -> do
 
 
 
-simpleStateSF :: SF String OutputState
-simpleStateSF = proc inputStr -> do
+wallFollowStateSF :: SF String OutputState
+wallFollowStateSF = proc inputStr -> do
   -- Decode inputs for string
   let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState inputStr
   let (target, targetErrFlag, targetDebugMsg) = decodeTargetState inputStr
@@ -59,7 +61,7 @@ simpleStateSF = proc inputStr -> do
   (turtlebotOut, stateDebugString) <- stateBehaviour -< (turtlebot, target)
  
   -- Create OutputData with state name
-  let outputData = OutputData { turtlebot = turtlebotOut, state = "Simple" }
+  let outputData = OutputData { turtlebot = turtlebotOut, state = "WallFollow" }
   -- Create the error string
   let (errFlag, debugMsg) = createErrFlagAndDebugMsg [ ("turtlebot", turtlebotErrFlag, turtlebotDebugMsg), ("target", targetErrFlag, targetDebugMsg) ]
   -- Add your own values for debugging
@@ -74,8 +76,8 @@ simpleStateSF = proc inputStr -> do
 
   returnA -< outputState
 
-analyzerSimpleState :: SF (String, OutputState) (Event (String))
-analyzerSimpleState = proc (sfInput, sfOutput) -> do
+analyzerWallFollowState :: SF (String, OutputState) (Event (String))
+analyzerWallFollowState = proc (sfInput, sfOutput) -> do
   -- Decode inputs for analysis
   let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState sfInput
   let (target, targetErrFlag, targetDebugMsg) = decodeTargetState sfInput

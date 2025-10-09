@@ -1,6 +1,10 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 
+-- MessageCollector: Efficiently collects and forwards MQTT messages
+-- Optimized for high-frequency message processing (20ms intervals)
+-- Uses queue draining to skip intermediate messages and keep up with input pace
+
 module MessageCollector where
 
 import Control.Concurrent (MVar, ThreadId, forkIO, newEmptyMVar, newMVar, putMVar, readChan, readMVar, takeMVar, threadDelay, killThread)
@@ -54,6 +58,22 @@ getLatestMsg queue = do
   if empty
     then return x
     else getLatestMsg queue
+
+-- Helper function to get latest message from queue, returning Nothing if queue is empty
+getLatestMsgMaybe :: TBQueue a -> STM (Maybe a)
+getLatestMsgMaybe queue = do
+  firstRead <- tryReadTBQueue queue
+  case firstRead of
+    Nothing -> return Nothing
+    Just x -> do
+      -- Drain the queue to get the latest message
+      drainAndGetLast x
+  where
+    drainAndGetLast current = do
+      next <- tryReadTBQueue queue
+      case next of
+        Nothing -> return (Just current)
+        Just nextMsg -> drainAndGetLast nextMsg
 
 getEnvVarValue :: String -> IO (Maybe String)
 getEnvVarValue varName = do
@@ -135,7 +155,8 @@ createMqttConfigFromFile filepath = do
 
 startMqttListener :: MqttConfig -> String -> MVar () -> IO (TBQueue String, ThreadId)
 startMqttListener mqttConfig topic stopSignal = do
-  eventChan <- newTBQueueIO 10
+  -- Increased queue size to 50 to handle message bursts better when draining
+  eventChan <- newTBQueueIO 50
   tid <- forkIO $ do
     let brokerUri = host mqttConfig ++ ":" ++ show (port mqttConfig)
     (session, mc) <- subToTopic brokerUri topic eventChan
@@ -196,14 +217,16 @@ mqttCollector = do
                   putStrLn "Graceful shutdown initiated"
                   return ()
                 else do
-                  msgs <- mapM (atomically . tryReadTBQueue) chans
+                  -- Use getLatestMsg to drain queues and get only the latest messages
+                  -- This skips intermediate messages to keep up with 20ms pace
+                  msgs <- mapM (atomically . getLatestMsgMaybe) chans
                   let newLasts = zipWith (flip fromMaybe) msgs lasts
                       combinedMsg = combineJsons newLasts
                   pubToTopic mqttConnection (from_env_collection_topic mqttConfigVals) combinedMsg
                   if any (\msg -> "QUIT" `isPrefixOf` msg) newLasts
                     then return ()
                     else do
-                      threadDelay 20000 -- Microseconds TODO: for testing use 1 second or so
+                      threadDelay 20000 -- Microseconds (20ms to match input pace)
                       loop newLasts
 
         let waitForRequiredDevices lasts = do
@@ -214,7 +237,8 @@ mqttCollector = do
                   putStrLn "Graceful shutdown during device wait"
                   return ()
                 else do
-                  msgs <- mapM (atomically . tryReadTBQueue) chans
+                  -- Use getLatestMsgMaybe to efficiently get only the latest messages
+                  msgs <- mapM (atomically . getLatestMsgMaybe) chans
                   let newLasts = zipWith (flip fromMaybe) msgs lasts
                       -- Check which topics have received messages (non-empty strings)
                       topicsWithMessages = [topic | (topic, msg) <- zip inputTopics newLasts, msg /= ""]
@@ -236,7 +260,7 @@ mqttCollector = do
                       loop newLasts
                     else do
                       -- putStrLn $ "Waiting for required devices. Received: " ++ show (Set.toList currentReceived) ++ ", Required: " ++ show requiredTopics
-                      threadDelay 100000 -- 100ms
+                      threadDelay 50000 -- 50ms - faster check during initialization
                       waitForRequiredDevices newLasts
 
         waitForRequiredDevices (replicate (length chans) "")

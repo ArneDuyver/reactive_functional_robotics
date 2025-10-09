@@ -4,10 +4,66 @@ controllers:
       name: turtlebot
       critical: true
       inputs:
-        - frontSensor:
-            name: frontSensor
+        - sensorFrontOne:
+            name: sensorFrontOne
+            type: Double
+            default: -1.0
+        - sensorFrontTwo:
+            name: sensorFrontTwo
+            type: Double
+            default: -1.0
+        - sensorBackRight:
+            name: sensorBackRight
+            type: Double
+            default: -1.0
+        - sensorFrontRight:
+            name: sensorFrontRight
+            type: Double
+            default: -1.0
+        - sensorBackLeft:
+            name: sensorBackLeft
+            type: Double
+            default: -1.0
+        - sensorFrontLeft:
+            name: sensorFrontLeft
+            type: Double
+            default: -1.0
+        - sensorFrontOneDetect:
+            name: sensorFrontOneDetect
             type: Integer
-            default: 3
+            default: -1
+        - sensorFrontTwoDetect:
+            name: sensorFrontTwoDetect
+            type: Integer
+            default: -1
+        - sensorBackRightDetect:
+            name: sensorBackRightDetect
+            type: Integer
+            default: -1
+        - sensorFrontRightDetect:
+            name: sensorFrontRightDetect
+            type: Integer
+            default: -1
+        - sensorBackLeftDetect:
+            name: sensorBackLeftDetect
+            type: Integer
+            default: -1
+        - sensorFrontLeftDetect:
+            name: sensorFrontLeftDetect
+            type: Integer
+            default: -1
+        - xCoor:
+            name: xCoor
+            type: Double
+            default: -1.0
+        - yCoor:
+            name: yCoor
+            type: Double
+            default: -1.0
+        - zRot:
+            name: zRot
+            type: Double
+            default: -1.0
       outputs:
         - motorLeft:
             name: motorLeft
@@ -22,16 +78,16 @@ controllers:
       name: target
       critical: true
       inputs:
-        - xcoordinate:
-            name: xcoordinate
+        - xCoorTarget:
+            name: xCoorTarget
             type: Double
-            default: 9999
-        - ycoordinate:
-            name: ycoordinate
+            default: -1
+        - yCoorTarget:
+            name: yCoorTarget
             type: Double
-            default: 9999
+            default: -1
         - width:
             name: width
             type: Double
-            default: 9999
+            default: -1
 

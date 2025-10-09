@@ -14,7 +14,21 @@ import Data.Maybe (fromMaybe)
 import Data.Text (pack)
 
 data TurtlebotState = TurtlebotState
-  { frontSensor :: Integer
+  { sensorFrontOne :: Double
+  , sensorFrontTwo :: Double
+  , sensorBackRight :: Double
+  , sensorFrontRight :: Double
+  , sensorBackLeft :: Double
+  , sensorFrontLeft :: Double
+  , sensorFrontOneDetect :: Integer
+  , sensorFrontTwoDetect :: Integer
+  , sensorBackRightDetect :: Integer
+  , sensorFrontRightDetect :: Integer
+  , sensorBackLeftDetect :: Integer
+  , sensorFrontLeftDetect :: Integer
+  , xCoor :: Double
+  , yCoor :: Double
+  , zRot :: Double
   }
   deriving (Show, Generic)
 
@@ -23,7 +37,21 @@ instance FromJSON TurtlebotState
 -- Default Turtlebot state
 defaultTurtlebotState :: TurtlebotState
 defaultTurtlebotState = TurtlebotState
-  { frontSensor = 3
+  { sensorFrontOne = -1
+  , sensorFrontTwo = -1
+  , sensorBackRight = -1
+  , sensorFrontRight = -1
+  , sensorBackLeft = -1
+  , sensorFrontLeft = -1
+  , sensorFrontOneDetect = -1
+  , sensorFrontTwoDetect = -1
+  , sensorBackRightDetect = -1
+  , sensorFrontRightDetect = -1
+  , sensorBackLeftDetect = -1
+  , sensorFrontLeftDetect = -1
+  , xCoor = -1
+  , yCoor = -1
+  , zRot = -1
   }
 
 decodeTurtlebotState :: String -> (TurtlebotState, Bool, String)

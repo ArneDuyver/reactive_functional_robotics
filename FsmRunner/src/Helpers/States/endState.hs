@@ -14,7 +14,10 @@ import Helpers.Controllers.OutputState
 stateBehaviour :: SF (TurtlebotState, TargetState) (Turtlebot, String)
 stateBehaviour = proc (turtlebot, target) -> do
   -- Create default types for Output
-  let turtlebotOut = defaultTurtlebot
+  let turtlebotOut = Turtlebot {
+                      motorLeft = 0.0,
+                      motorRight = 0.0
+                    }
       debugString = "STATE: end :: "  -- Customize this debug message
       -- Add your control logic here using the input parameters
   returnA -< (turtlebotOut, debugString)
