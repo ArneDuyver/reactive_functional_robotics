@@ -192,12 +192,8 @@ setup collectOutputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThr
     -- Event handler for import button - import project from zip
     case importButton of
         Just btn -> on UI.click btn $ \_ -> do
-            updateBuildDisplay "Opening saved_projects folder..."
-            liftIO $ do
-                -- Open saved_projects folder first
-                _ <- createProcess (shell "explorer.exe saved_projects")
-                -- Then start import process
-                importProject window (\html -> void $ updateBuildDisplayHtml html)
+            updateBuildDisplay "Starting import process..."
+            liftIO $ importProject window (\html -> void $ updateBuildDisplayHtml html)
         Nothing -> return ()
 
     -- Event handler for export button - export project to zip
@@ -450,6 +446,7 @@ importProject window updateDisplay = do
             "$openFileDialog = New-Object System.Windows.Forms.OpenFileDialog; " ++
             "$openFileDialog.Filter = 'ZIP files (*.zip)|*.zip'; " ++
             "$openFileDialog.Title = 'Select Project ZIP File'; " ++
+            "$openFileDialog.InitialDirectory = (Get-Location).Path + '\\saved_projects'; " ++
             "if ($openFileDialog.ShowDialog() -eq 'OK') { $openFileDialog.FileName } else { '' }"] ""
         
         let zipPath = init result -- Remove trailing newline
