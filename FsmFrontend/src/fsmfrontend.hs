@@ -5,13 +5,14 @@ import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core
 import System.Process (std_out, readProcess, readCreateProcess, shell, createProcess, StdStream(CreatePipe), waitForProcess, terminateProcess, ProcessHandle, getPid, getProcessExitCode)
 import System.IO (hSetBuffering, BufferMode(LineBuffering), hIsEOF, hGetLine, Handle, hClose)
-import Control.Monad (void, when)
+import Control.Monad (void, when, forM_)
 import Data.IORef
 import System.Exit (exitSuccess)
 import Control.Concurrent (forkIO, killThread, ThreadId, threadDelay)
 import Control.Exception (catch, SomeException)
-import System.FilePath (takeDirectory)
-import System.Directory (doesFileExist, removeFile)
+import System.FilePath (takeDirectory, (</>), takeBaseName, takeExtension)
+import System.Directory (doesFileExist, removeFile, listDirectory, createDirectoryIfMissing, removeDirectoryRecursive, copyFile, doesDirectoryExist)
+import Data.List (isSuffixOf)
 
 
 -- outputRef: Stores accumulated output lines from running processes
@@ -33,7 +34,10 @@ setup collectOutputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThr
     -- Get the gear button and upload button from HTML
     gearButton <- getElementById window "settings-btn"
     uploadButton <- getElementById window "upload-btn"
+    importButton <- getElementById window "import-btn"
+    exportButton <- getElementById window "export-btn"
     fileInput <- getElementById window "file-input"
+    zipFileInput <- getElementById window "zip-file-input"
     pythonPathInput <- getElementById window "python-path-input"
 
     -- Create Threepenny buttons with proper CSS classes and IDs
@@ -183,6 +187,24 @@ setup collectOutputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThr
                 putStrLn "Opening config folder..."
                 _ <- createProcess (shell "explorer.exe config")
                 return ()
+        Nothing -> return ()
+
+    -- Event handler for import button - import project from zip
+    case importButton of
+        Just btn -> on UI.click btn $ \_ -> do
+            updateBuildDisplay "Opening saved_projects folder..."
+            liftIO $ do
+                -- Open saved_projects folder first
+                _ <- createProcess (shell "explorer.exe saved_projects")
+                -- Then start import process
+                importProject window (\html -> void $ updateBuildDisplayHtml html)
+        Nothing -> return ()
+
+    -- Event handler for export button - export project to zip
+    case exportButton of
+        Just btn -> on UI.click btn $ \_ -> do
+            updateBuildDisplay "Starting export process..."
+            liftIO $ exportProject window (\html -> void $ updateBuildDisplayHtml html)
         Nothing -> return ()
 
     on UI.click quitButton $ \_ -> do
@@ -414,6 +436,191 @@ runProcessWithLiveOutput outputRef processPhRef processThreadRef processHandleRe
     
     writeIORef processThreadRef (Just tid)
     return ()
+
+-- Import project from zip file
+importProject :: Window -> (String -> UI ()) -> IO ()
+importProject window updateDisplay = do
+    putStrLn "Starting import process..."
+    void $ runUI window $ updateDisplay "<div>Starting import process...</div>"
+    
+    catch (do
+        -- Open file dialog to select zip file
+        result <- readProcess "powershell" ["-Command", 
+            "Add-Type -AssemblyName System.Windows.Forms; " ++ 
+            "$openFileDialog = New-Object System.Windows.Forms.OpenFileDialog; " ++
+            "$openFileDialog.Filter = 'ZIP files (*.zip)|*.zip'; " ++
+            "$openFileDialog.Title = 'Select Project ZIP File'; " ++
+            "if ($openFileDialog.ShowDialog() -eq 'OK') { $openFileDialog.FileName } else { '' }"] ""
+        
+        let zipPath = init result -- Remove trailing newline
+        
+        if null zipPath
+            then do
+                putStrLn "Import cancelled by user"
+                void $ runUI window $ updateDisplay "<div>Import cancelled by user</div>"
+            else do
+                putStrLn $ "Selected zip file: " ++ zipPath
+                void $ runUI window $ updateDisplay $ "<div>Selected zip file: " ++ zipPath ++ "</div><div>Extracting...</div>"
+                
+                -- Create temporary extraction directory
+                let tempDir = "temp_import"
+                createDirectoryIfMissing True tempDir
+                
+                -- Extract zip file using PowerShell
+                _ <- readProcess "powershell" ["-Command", 
+                    "Expand-Archive -Path '" ++ zipPath ++ "' -DestinationPath '" ++ tempDir ++ "' -Force"] ""
+                
+                -- Check if extracted files exist
+                tempContents <- listDirectory tempDir
+                putStrLn $ "Extracted contents: " ++ show tempContents
+                
+                void $ runUI window $ updateDisplay $ "<div>Extracted contents: " ++ show tempContents ++ "</div><div>Copying files...</div>"
+                
+                -- Copy files to their destinations
+                -- 1. Copy fsm.xml
+                let fsmXmlSource = tempDir </> "fsm.xml"
+                let fsmXmlDest = "config" </> "fsm.xml"
+                fsmXmlExists <- doesFileExist fsmXmlSource
+                if fsmXmlExists
+                    then do
+                        copyFile fsmXmlSource fsmXmlDest
+                        putStrLn "Copied fsm.xml to config folder"
+                    else putStrLn "Warning: fsm.xml not found in zip file"
+                
+                -- 2. Copy configuration.yml
+                let configYmlSource = tempDir </> "configuration.yml"
+                let configYmlDest = "config" </> "configuration.yml"
+                configYmlExists <- doesFileExist configYmlSource
+                if configYmlExists
+                    then do
+                        copyFile configYmlSource configYmlDest
+                        putStrLn "Copied configuration.yml to config folder"
+                    else putStrLn "Warning: configuration.yml not found in zip file"
+                
+                -- 3. Clear existing states folder and copy new states
+                let statesDir = "FsmRunner" </> "src" </> "Helpers" </> "States"
+                let tempStatesDir = tempDir </> "states"
+                
+                tempStatesDirExists <- doesDirectoryExist tempStatesDir
+                if tempStatesDirExists
+                    then do
+                        -- Remove existing states
+                        existingStates <- catch (listDirectory statesDir) (\(_ :: SomeException) -> return [])
+                        forM_ existingStates $ \stateFile -> do
+                            if ".hs" `isSuffixOf` stateFile
+                                then catch (removeFile (statesDir </> stateFile)) (\(_ :: SomeException) -> return ())
+                                else return ()
+                        
+                        -- Copy new states
+                        newStates <- catch (listDirectory tempStatesDir) (\(_ :: SomeException) -> return [])
+                        forM_ newStates $ \stateFile -> do
+                            if ".hs" `isSuffixOf` stateFile
+                                then do
+                                    copyFile (tempStatesDir </> stateFile) (statesDir </> stateFile)
+                                    putStrLn $ "Copied state file: " ++ stateFile
+                                else return ()
+                        putStrLn "Replaced all state files"
+                    else putStrLn "Warning: states folder not found in zip file"
+                
+                -- Clean up temporary directory
+                removeDirectoryRecursive tempDir
+                putStrLn "Import completed successfully!"
+                
+                void $ runUI window $ updateDisplay "<div style='color: green;'>Import completed successfully!</div><div>Files have been imported to their respective locations.</div>"
+                
+        ) (\e -> do
+            putStrLn $ "Import failed: " ++ show (e :: SomeException)
+            void $ runUI window $ updateDisplay $ "<div style='color: red;'>Import failed: " ++ show (e :: SomeException) ++ "</div>"
+            )
+
+-- Export project to zip file
+exportProject :: Window -> (String -> UI ()) -> IO ()
+exportProject window updateDisplay = do
+    putStrLn "Starting export process..."
+    void $ runUI window $ updateDisplay "<div>Starting export process...</div>"
+    
+    catch (do
+        -- Prompt user for project name
+        result <- readProcess "powershell" ["-Command", 
+            "Add-Type -AssemblyName Microsoft.VisualBasic; " ++
+            "[Microsoft.VisualBasic.Interaction]::InputBox('Enter project name:', 'Export Project', 'MyProject')"] ""
+        
+        let projectName = init result -- Remove trailing newline
+        
+        if null projectName
+            then do
+                putStrLn "Export cancelled by user"
+                void $ runUI window $ updateDisplay "<div>Export cancelled by user</div>"
+            else do
+                putStrLn $ "Project name: " ++ projectName
+                void $ runUI window $ updateDisplay $ "<div>Project name: " ++ projectName ++ "</div><div>Preparing export...</div>"
+                
+                -- Create temporary directory for export
+                let tempDir = "temp_export"
+                createDirectoryIfMissing True tempDir
+                
+                -- Copy files to temporary directory
+                -- 1. Copy fsm.xml
+                let fsmXmlSource = "config" </> "fsm.xml"
+                let fsmXmlDest = tempDir </> "fsm.xml"
+                fsmXmlExists <- doesFileExist fsmXmlSource
+                if fsmXmlExists
+                    then do
+                        copyFile fsmXmlSource fsmXmlDest
+                        putStrLn "Added fsm.xml to export"
+                    else putStrLn "Warning: fsm.xml not found"
+                
+                -- 2. Copy configuration.yml
+                let configYmlSource = "config" </> "configuration.yml"
+                let configYmlDest = tempDir </> "configuration.yml"
+                configYmlExists <- doesFileExist configYmlSource
+                if configYmlExists
+                    then do
+                        copyFile configYmlSource configYmlDest
+                        putStrLn "Added configuration.yml to export"
+                    else putStrLn "Warning: configuration.yml not found"
+                
+                -- 3. Copy states folder
+                let statesDir = "FsmRunner" </> "src" </> "Helpers" </> "States"
+                let tempStatesDir = tempDir </> "states"
+                createDirectoryIfMissing True tempStatesDir
+                
+                void $ runUI window $ updateDisplay $ "<div>Project name: " ++ projectName ++ "</div><div>Copying state files...</div>"
+                
+                stateFiles <- catch (listDirectory statesDir) (\(_ :: SomeException) -> return [])
+                forM_ stateFiles $ \stateFile -> do
+                    if ".hs" `isSuffixOf` stateFile
+                        then do
+                            catch (copyFile (statesDir </> stateFile) (tempStatesDir </> stateFile)) 
+                                (\e -> putStrLn $ "Failed to copy " ++ stateFile ++ ": " ++ show (e :: SomeException))
+                            putStrLn $ "Added state file: " ++ stateFile
+                        else return ()
+                
+                -- Create zip file in saved_projects directory
+                let zipFileName = projectName ++ ".zip"
+                let zipPath = "saved_projects" </> zipFileName
+                
+                void $ runUI window $ updateDisplay $ "<div>Project name: " ++ projectName ++ "</div><div>Creating ZIP file...</div>"
+                
+                -- Create zip using PowerShell
+                _ <- readProcess "powershell" ["-Command", 
+                    "Compress-Archive -Path '" ++ tempDir ++ "\\*' -DestinationPath '" ++ zipPath ++ "' -Force"] ""
+                
+                -- Clean up temporary directory
+                removeDirectoryRecursive tempDir
+                
+                putStrLn $ "Project exported successfully to: " ++ zipPath
+                
+                void $ runUI window $ updateDisplay $ "<div style='color: green;'>Project exported successfully!</div><div>Saved to: " ++ zipPath ++ "</div><div>Opening saved_projects folder...</div>"
+                
+                -- Open saved_projects folder
+                _ <- createProcess (shell $ "explorer.exe saved_projects")
+                return ()
+                
+        ) (\e -> do
+            putStrLn $ "Export failed: " ++ show (e :: SomeException)
+            void $ runUI window $ updateDisplay $ "<div style='color: red;'>Export failed: " ++ show (e :: SomeException) ++ "</div>"
+            )
 
 startFrontend :: IO ()
 startFrontend = do

@@ -24,6 +24,8 @@
                 <!-- Threepenny buttons will be added here -->
             </div>
             <div class="button-row-right">
+                <button class="btn btn-import" id="import-btn" title="Import Project"><i class="fa-solid fa-file-import"></i></button>
+                <button class="btn btn-export" id="export-btn" title="Export Project"><i class="fa-solid fa-file-export"></i></button>
                 <button class="btn btn-python" id="python-btn" title="Change script path" onclick="change_python_path()"><i class="fa-brands fa-python"></i></button>
                 <form target="_blank" action="https://app.diagrams.net/?src=about">
                     <button class="btn drawio-logo" type="submit" value="Go to draw.io" title="Open draw.io">
@@ -33,6 +35,7 @@
                 <button class="btn btn-gear" id="settings-btn" title="Open States Folder"><i class="fa-solid fa-file-pen"></i></button>
                 <button class="btn btn-upload" id="upload-btn" title="Upload fsm.xml"><i class="fa-solid fa-gear"></i></button>
                 <input type="file" id="file-input" accept=".xml" style="display: none;" />
+                <input type="file" id="zip-file-input" accept=".zip" style="display: none;" />
             </div>
         </div>
         

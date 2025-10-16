@@ -11,22 +11,22 @@ import Helpers.Controllers.OutputState
 
 import Helpers.States.ErrorState
 
-import Helpers.States.WallFollowState
+import Helpers.States.MoveForwardState
 import Helpers.States.EndState
-import Helpers.States.MoveInOpeningState
 import Helpers.States.TurnRightState
-import Helpers.States.MoveOutOpeningState
+import Helpers.States.TurnLeftState
+import Helpers.States.RealignState
 
 mapping :: SF String OutputState -> String -> SF String OutputState
 mapping startingSF eventOutput
-  | eventOutput == "wallFollowState"  = kSwitch wallFollowStateSF analyzerWallFollowState mapping
+  | eventOutput == "moveForwardState"  = kSwitch moveForwardStateSF analyzerMoveForwardState mapping
   | eventOutput == "endState"  = kSwitch endStateSF analyzerEndState mapping
-  | eventOutput == "moveInOpeningState"  = kSwitch moveInOpeningStateSF analyzerMoveInOpeningState mapping
   | eventOutput == "turnRightState"  = kSwitch turnRightStateSF analyzerTurnRightState mapping
-  | eventOutput == "moveOutOpeningState"  = kSwitch moveOutOpeningStateSF analyzerMoveOutOpeningState mapping
+  | eventOutput == "turnLeftState"  = kSwitch turnLeftStateSF analyzerTurnLeftState mapping
+  | eventOutput == "realignState"  = kSwitch realignStateSF analyzerRealignState mapping
   | otherwise = errorStateSF
 
 
 -- MAIN
 mainSF :: SF String OutputState
-mainSF = kSwitch wallFollowStateSF analyzerWallFollowState mapping
+mainSF = kSwitch moveForwardStateSF analyzerMoveForwardState mapping

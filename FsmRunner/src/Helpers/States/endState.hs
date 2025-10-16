@@ -10,26 +10,19 @@ import Helpers.Controllers.Target
 import Helpers.Controllers.OutputState
 
 
--- State behavior logic function - modify this to implement your state behavior
 stateBehaviour :: SF (TurtlebotState, TargetState) (Turtlebot, String)
 stateBehaviour = proc (turtlebot, target) -> do
-  -- Create default types for Output
-  let turtlebotOut = Turtlebot {
-                      motorLeft = 0.0,
-                      motorRight = 0.0
-                    }
-      debugString = "STATE: end :: "  -- Customize this debug message
-      -- Add your control logic here using the input parameters
+  let turtlebotOut = defaultTurtlebot
+  t <- time -< ()
+  let debugString 
+        | t > 3 = "STOPSIM STATE: end :: "
+        | otherwise = "STATE: end :: "
   returnA -< (turtlebotOut, debugString)
 
--- State transition logic function - determines next state based on inputs
 stateTransition :: SF (TurtlebotState, TargetState) (Bool, String)
 stateTransition = proc (turtlebot, target) -> do
-  -- Add your transition logic here using the input parameters:
-  -- Return (shouldSwitch, targetStateName)
-  let shouldSwitch = False  -- Change this condition based on your logic
-      targetState = "newStateName"  -- Target state name
-      -- Add your transition logic here based on the input parameters
+  let shouldSwitch = False  
+      targetState = "newStateName" 
   returnA -< (shouldSwitch, targetState)
 
 

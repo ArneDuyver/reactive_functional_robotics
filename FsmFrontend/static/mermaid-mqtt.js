@@ -96,11 +96,11 @@ function startApp() {
   const topicHighlight = "fsm/toenv";
 
   let diagramData = {
-    classes: ["WallFollow", "End", "MoveInOpening", "TurnRight", "MoveOutOpening", "Error"],
-    associations: [["WallFollow", "End"], ["WallFollow", "MoveInOpening"], ["MoveInOpening", "TurnRight"], ["TurnRight", "MoveOutOpening"], ["MoveOutOpening", "WallFollow"]],
+    classes: ["MoveForward", "End", "TurnRight", "TurnLeft", "Realign", "Error"],
+    associations: [["MoveForward", "End"], ["MoveForward", "TurnRight"], ["MoveForward", "TurnLeft"], ["MoveForward", "Realign"], ["TurnRight", "MoveForward"], ["TurnLeft", "MoveForward"], ["Realign", "MoveForward"]],
   };
 
-  let activeClass = "WallFollow";
+  let activeClass = "MoveForward";
 
   // Connect to MQTT
   const client = mqtt.connect(brokerUrl);

@@ -1,6 +1,6 @@
 {-# LANGUAGE Arrows #-}
 
-module Helpers.States.SimpleState where
+module Helpers.States.TurnLeftState where
 
 import Control.Concurrent
 import FRP.Yampa
@@ -9,22 +9,24 @@ import Helpers.Controllers.Turtlebot
 import Helpers.Controllers.Target
 import Helpers.Controllers.OutputState
 
--- State behavior logic function - modify this to implement your state behavior
+
 stateBehaviour :: SF (TurtlebotState, TargetState) (Turtlebot, String)
 stateBehaviour = proc (turtlebot, target) -> do
   let turtlebotOut = Turtlebot {
-                      motorLeft = fst (translationalAndRotationalVelocitiesToWheelVelocities  0.1 0.0),
-                      motorRight = snd (translationalAndRotationalVelocitiesToWheelVelocities  0.1 0.0)
+                      motorLeft = fst (translationalAndRotationalVelocitiesToWheelVelocities 0.0 0.2),
+                      motorRight = snd (translationalAndRotationalVelocitiesToWheelVelocities 0.0 0.2)
                     }
-      debugString = "STATE: simple :: " ++ show (frontSensor turtlebot) ++ " target: " ++ show (xcoordinate target)
+      debugString = "STATE: turnLeft :: "  
   returnA -< (turtlebotOut, debugString)
 
--- State transition logic function - determines next state based on inputs
 stateTransition :: SF (TurtlebotState, TargetState) (Bool, String)
 stateTransition = proc (turtlebot, target) -> do
-  t <- time -< ()
-  let shouldSwitch = t > 20  
-      targetState = "newStateName"  
+  totalTurned <- integral -< 0.2
+  
+  let turnedDegrees = radiansToDegrees totalTurned
+      targetDegrees = 90.0
+      shouldSwitch = turnedDegrees >= targetDegrees
+      targetState = "moveForwardState"
   returnA -< (shouldSwitch, targetState)
 
 
@@ -48,8 +50,8 @@ stateTransition = proc (turtlebot, target) -> do
 
 
 
-simpleStateSF :: SF String OutputState
-simpleStateSF = proc inputStr -> do
+turnLeftStateSF :: SF String OutputState
+turnLeftStateSF = proc inputStr -> do
   -- Decode inputs for string
   let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState inputStr
   let (target, targetErrFlag, targetDebugMsg) = decodeTargetState inputStr
@@ -59,7 +61,7 @@ simpleStateSF = proc inputStr -> do
   (turtlebotOut, stateDebugString) <- stateBehaviour -< (turtlebot, target)
  
   -- Create OutputData with state name
-  let outputData = OutputData { turtlebot = turtlebotOut, state = "Simple" }
+  let outputData = OutputData { turtlebot = turtlebotOut, state = "TurnLeft" }
   -- Create the error string
   let (errFlag, debugMsg) = createErrFlagAndDebugMsg [ ("turtlebot", turtlebotErrFlag, turtlebotDebugMsg), ("target", targetErrFlag, targetDebugMsg) ]
   -- Add your own values for debugging
@@ -74,8 +76,8 @@ simpleStateSF = proc inputStr -> do
 
   returnA -< outputState
 
-analyzerSimpleState :: SF (String, OutputState) (Event (String))
-analyzerSimpleState = proc (sfInput, sfOutput) -> do
+analyzerTurnLeftState :: SF (String, OutputState) (Event (String))
+analyzerTurnLeftState = proc (sfInput, sfOutput) -> do
   -- Decode inputs for analysis
   let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState sfInput
   let (target, targetErrFlag, targetDebugMsg) = decodeTargetState sfInput

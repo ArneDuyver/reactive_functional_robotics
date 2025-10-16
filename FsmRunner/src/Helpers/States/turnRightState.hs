@@ -10,23 +10,33 @@ import Helpers.Controllers.Target
 import Helpers.Controllers.OutputState
 
 
--- State behavior logic function - modify this to implement your state behavior
 stateBehaviour :: SF (TurtlebotState, TargetState) (Turtlebot, String)
 stateBehaviour = proc (turtlebot, target) -> do
-  -- Create default types for Output
-  let turtlebotOut = defaultTurtlebot
-      debugString = "STATE: turnRight :: "  -- Customize this debug message
-      -- Add your control logic here using the input parameters
+  let turtlebotOut = Turtlebot {
+                      motorLeft = fst (translationalAndRotationalVelocitiesToWheelVelocities 0.0 (-0.2)),
+                      motorRight = snd (translationalAndRotationalVelocitiesToWheelVelocities 0.0 (-0.2))
+                    }
+      debugString = "STATE: turnRight :: " 
   returnA -< (turtlebotOut, debugString)
 
--- State transition logic function - determines next state based on inputs
 stateTransition :: SF (TurtlebotState, TargetState) (Bool, String)
 stateTransition = proc (turtlebot, target) -> do
-  -- Add your transition logic here using the input parameters:
-  -- Return (shouldSwitch, targetStateName)
-  let shouldSwitch = False  -- Change this condition based on your logic
-      targetState = "newStateName"  -- Target state name
-      -- Add your transition logic here based on the input parameters
+  let currentAngle = zRot turtlebot
+  rec
+    prevAngle <- iPre 0.0 -< currentAngle
+    prevTotalTurn <- iPre 0.0 -< totalTurn
+    let totalTurn = prevTotalTurn + (currentAngle - prevAngle)
+    
+  -- Normalize the angle difference to handle wraparound (e.g., -180 to 180)
+  let normalizedDiff
+        | totalTurn > pi = totalTurn - 2*pi
+        | totalTurn < (-pi) = totalTurn + 2*pi
+        | otherwise = totalTurn
+
+      turnedDegrees = abs (radiansToDegrees normalizedDiff)
+      targetDegrees = 90.0
+      shouldSwitch = turnedDegrees >= targetDegrees
+      targetState = "moveForwardState"
   returnA -< (shouldSwitch, targetState)
 
 
@@ -59,7 +69,7 @@ turnRightStateSF = proc inputStr -> do
 
   -- Use the stateBehaviour SF
   (turtlebotOut, stateDebugString) <- stateBehaviour -< (turtlebot, target)
- 
+
   -- Create OutputData with state name
   let outputData = OutputData { turtlebot = turtlebotOut, state = "TurnRight" }
   -- Create the error string
@@ -70,7 +80,7 @@ turnRightStateSF = proc inputStr -> do
   let debugString
         | errFlag = "STOPSIM " ++ specialDebugString
         | otherwise = specialDebugString
-  
+
   -- Create OutputState
   let outputState = OutputState { outputData = outputData, errorFlag = errFlag, debugString = debugString }
 
@@ -85,7 +95,7 @@ analyzerTurnRightState = proc (sfInput, sfOutput) -> do
 
   -- Determine next state using transition logic
   (shouldSwitch, targetStateName) <- stateTransition -< (turtlebot, target)
-  
+
   e <- edge -< shouldSwitch
   let eTagged = tag e targetStateName
   returnA -< eTagged

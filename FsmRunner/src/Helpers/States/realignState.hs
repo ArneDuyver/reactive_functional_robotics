@@ -1,6 +1,6 @@
 {-# LANGUAGE Arrows #-}
 
-module Helpers.States.MoveOutOpeningState where
+module Helpers.States.RealignState where
 
 import Control.Concurrent
 import FRP.Yampa
@@ -15,7 +15,7 @@ stateBehaviour :: SF (TurtlebotState, TargetState) (Turtlebot, String)
 stateBehaviour = proc (turtlebot, target) -> do
   -- Create default types for Output
   let turtlebotOut = defaultTurtlebot
-      debugString = "STATE: moveOutOpening :: "  -- Customize this debug message
+      debugString = "STATE: realign :: "  -- Customize this debug message
       -- Add your control logic here using the input parameters
   returnA -< (turtlebotOut, debugString)
 
@@ -50,8 +50,8 @@ stateTransition = proc (turtlebot, target) -> do
 
 
 
-moveOutOpeningStateSF :: SF String OutputState
-moveOutOpeningStateSF = proc inputStr -> do
+realignStateSF :: SF String OutputState
+realignStateSF = proc inputStr -> do
   -- Decode inputs for string
   let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState inputStr
   let (target, targetErrFlag, targetDebugMsg) = decodeTargetState inputStr
@@ -61,7 +61,7 @@ moveOutOpeningStateSF = proc inputStr -> do
   (turtlebotOut, stateDebugString) <- stateBehaviour -< (turtlebot, target)
  
   -- Create OutputData with state name
-  let outputData = OutputData { turtlebot = turtlebotOut, state = "MoveOutOpening" }
+  let outputData = OutputData { turtlebot = turtlebotOut, state = "Realign" }
   -- Create the error string
   let (errFlag, debugMsg) = createErrFlagAndDebugMsg [ ("turtlebot", turtlebotErrFlag, turtlebotDebugMsg), ("target", targetErrFlag, targetDebugMsg) ]
   -- Add your own values for debugging
@@ -76,8 +76,8 @@ moveOutOpeningStateSF = proc inputStr -> do
 
   returnA -< outputState
 
-analyzerMoveOutOpeningState :: SF (String, OutputState) (Event (String))
-analyzerMoveOutOpeningState = proc (sfInput, sfOutput) -> do
+analyzerRealignState :: SF (String, OutputState) (Event (String))
+analyzerRealignState = proc (sfInput, sfOutput) -> do
   -- Decode inputs for analysis
   let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState sfInput
   let (target, targetErrFlag, targetDebugMsg) = decodeTargetState sfInput
