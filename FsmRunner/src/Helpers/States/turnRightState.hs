@@ -9,6 +9,15 @@ import Helpers.Controllers.Turtlebot
 import Helpers.Controllers.Target
 import Helpers.Controllers.OutputState
 
+import Helpers.States.StateTemplate
+
+-- Use the generic wrappers
+turnRightStateSF :: SF String OutputState
+turnRightStateSF = genericStateSF "TurnRight" stateBehaviour
+
+analyzerTurnRightState :: SF (String, OutputState) (Event String)
+analyzerTurnRightState = genericAnalyzerSF stateTransition
+
 
 stateBehaviour :: SF (TurtlebotState, TargetState) (Turtlebot, String)
 stateBehaviour = proc (turtlebot, target) -> do
@@ -38,64 +47,3 @@ stateTransition = proc (turtlebot, target) -> do
       shouldSwitch = turnedDegrees >= targetDegrees
       targetState = "moveForwardState"
   returnA -< (shouldSwitch, targetState)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-turnRightStateSF :: SF String OutputState
-turnRightStateSF = proc inputStr -> do
-  -- Decode inputs for string
-  let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState inputStr
-  let (target, targetErrFlag, targetDebugMsg) = decodeTargetState inputStr
-
-
-  -- Use the stateBehaviour SF
-  (turtlebotOut, stateDebugString) <- stateBehaviour -< (turtlebot, target)
-
-  -- Create OutputData with state name
-  let outputData = OutputData { turtlebot = turtlebotOut, state = "TurnRight" }
-  -- Create the error string
-  let (errFlag, debugMsg) = createErrFlagAndDebugMsg [ ("turtlebot", turtlebotErrFlag, turtlebotDebugMsg), ("target", targetErrFlag, targetDebugMsg) ]
-  -- Add your own values for debugging
-  let specialDebugString = if errFlag then "DEBUG:: " ++ debugMsg else stateDebugString
-  -- To stop simulation
-  let debugString
-        | errFlag = "STOPSIM " ++ specialDebugString
-        | otherwise = specialDebugString
-
-  -- Create OutputState
-  let outputState = OutputState { outputData = outputData, errorFlag = errFlag, debugString = debugString }
-
-  returnA -< outputState
-
-analyzerTurnRightState :: SF (String, OutputState) (Event (String))
-analyzerTurnRightState = proc (sfInput, sfOutput) -> do
-  -- Decode inputs for analysis
-  let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState sfInput
-  let (target, targetErrFlag, targetDebugMsg) = decodeTargetState sfInput
-
-
-  -- Determine next state using transition logic
-  (shouldSwitch, targetStateName) <- stateTransition -< (turtlebot, target)
-
-  e <- edge -< shouldSwitch
-  let eTagged = tag e targetStateName
-  returnA -< eTagged

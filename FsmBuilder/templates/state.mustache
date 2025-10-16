@@ -1,13 +1,22 @@
 {-# LANGUAGE Arrows #-}
 
-module {{moduleName}}State where
+module Helpers.States.{{moduleName}}State where
 
 import Control.Concurrent
 import FRP.Yampa
 import Helpers.YampaHelper
 {{import_controllers}}
+import Helpers.States.StateTemplate
 
--- State behavior logic function - modify this to implement your state behavior
+-- Use the generic wrappers
+{{stateNameLower}}StateSF :: SF String OutputState
+{{stateNameLower}}StateSF = genericStateSF "{{stateName}}" stateBehaviour
+
+analyzer{{stateName}}State :: SF (String, OutputState) (Event String)
+analyzer{{stateName}}State = genericAnalyzerSF stateTransition
+
+
+-- Specific behaviour for {{stateName}}
 stateBehaviour :: SF {{sf_input_type}} ({{output_type}}, String)
 stateBehaviour = proc {{sf_input_parameter}} -> do
   -- Create default types for Output
@@ -16,7 +25,7 @@ stateBehaviour = proc {{sf_input_parameter}} -> do
       -- Add your control logic here using the input parameters
   returnA -< ({{output_variable}}, debugString)
 
--- State transition logic function - determines next state based on inputs
+-- Specific transition for {{stateName}}
 stateTransition :: SF {{sf_input_type}} (Bool, String)
 stateTransition = proc {{sf_input_parameter}} -> do
   -- Add your transition logic here using the input parameters:
@@ -25,60 +34,3 @@ stateTransition = proc {{sf_input_parameter}} -> do
       targetState = "newStateName"  -- Target state name
       -- Add your transition logic here based on the input parameters
   returnA -< (shouldSwitch, targetState)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-{{stateNameLower}}StateSF :: SF String OutputState
-{{stateNameLower}}StateSF = proc inputStr -> do
-  -- Decode inputs for string
-{{decode_critical_controllers}}
-
-  -- Use the stateBehaviour SF
-  ({{output_variable}}, stateDebugString) <- stateBehaviour -< {{sf_input_variable}}
- 
-  -- Create OutputData with state name
-  let outputData = OutputData { {{outputdata}}, state = "{{stateName}}" }
-  -- Create the error string
-  let (errFlag, debugMsg) = createErrFlagAndDebugMsg [ {{input_errors_debugs}} ]
-  -- Add your own values for debugging
-  let specialDebugString = if errFlag then "DEBUG:: " ++ debugMsg else stateDebugString
-  -- To stop simulation
-  let debugString
-        | errFlag = "STOPSIM " ++ specialDebugString
-        | otherwise = specialDebugString
-  
-  -- Create OutputState
-  let outputState = OutputState { outputData = outputData, errorFlag = errFlag, debugString = debugString }
-
-  returnA -< outputState
-
-analyzer{{stateName}}State :: SF (String, OutputState) (Event (String))
-analyzer{{stateName}}State = proc (sfInput, sfOutput) -> do
-  -- Decode inputs for analysis
-{{decode_critical_controllers_analyzer}}
-
-  -- Determine next state using transition logic
-  (shouldSwitch, targetStateName) <- stateTransition -< {{sf_input_variable_analyzer}}
-  
-  e <- edge -< shouldSwitch
-  let eTagged = tag e targetStateName
-  returnA -< eTagged

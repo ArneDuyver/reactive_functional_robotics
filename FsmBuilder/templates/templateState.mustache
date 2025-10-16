@@ -1,0 +1,59 @@
+{-# LANGUAGE Arrows #-}
+
+module Helpers.States.StateTemplate
+  ( genericStateSF
+  , genericAnalyzerSF
+  ) where
+
+import FRP.Yampa
+import Helpers.YampaHelper
+{{import_controllers}}
+
+-- | Generic State Signal Function
+-- Takes a state name and a stateBehaviour SF
+genericStateSF
+  :: String
+  -> SF {{sf_input_type}} ({{output_type}}, String)
+  -> SF String OutputState
+genericStateSF stateName stateBehaviour = proc inputStr -> do
+  -- Decode inputs
+{{decode_critical_controllers}}
+
+  -- Run the provided state behaviour
+  ({{output_variable}}, stateDebugString) <- stateBehaviour -< {{sf_input_variable}}
+
+  -- Create OutputData with the state name
+  let outputData = OutputData { {{outputdata}}, state = stateName }
+
+  -- Handle errors and debugging
+  let (errFlag, debugMsg) =
+        createErrFlagAndDebugMsg
+          [ {{input_errors_debugs}}
+          ]
+  let specialDebugString =
+        if errFlag then "DEBUG:: " ++ debugMsg else stateDebugString
+  let debugString =
+        if errFlag then "STOPSIM " ++ specialDebugString else specialDebugString
+
+  -- Produce OutputState
+  let outputState =
+        OutputState { outputData = outputData
+                    , errorFlag = errFlag
+                    , debugString = debugString
+                    }
+
+  returnA -< outputState
+
+
+-- | Generic Analyzer Signal Function
+-- Takes a stateTransition SF
+genericAnalyzerSF
+  :: SF {{sf_input_type}} (Bool, String)
+  -> SF (String, OutputState) (Event String)
+genericAnalyzerSF stateTransition = proc (sfInput, sfOutput) -> do
+{{decode_critical_controllers_analyzer}}
+
+  (shouldSwitch, targetStateName) <- stateTransition -< {{sf_input_variable_analyzer}}
+  e <- edge -< shouldSwitch
+  let eTagged = tag e targetStateName
+  returnA -< eTagged

@@ -225,39 +225,6 @@ generateSFInputVariableAnalyzer controllers =
         controllers -> "(" ++ intercalate ", " (map IB.rawControllerName controllers) ++ ")"
         [] -> "turtlebot" -- Default fallback
 
--- Generate control logic comments
-generateControlLogicComments :: [IB.RawControllerInputState] -> [OB.RawControllerOutputState] -> String
-generateControlLogicComments inputControllers outputControllers =
-  let outputVar = generateOutputVariable outputControllers
-      criticalInputs = filter IB.rawCritical inputControllers
-      outputFields = case outputControllers of
-        [controller] -> OB.rawOutputs controller
-        _ -> [] -- Default fallback
-      
-      -- Generate example field assignments
-      fieldExamples = case outputFields of
-        (field1:field2:_) -> 
-          "      -- " ++ outputVar ++ "' = " ++ outputVar ++ " { \n" ++
-          "      --   " ++ OB.rawOutputName field1 ++ " = if (value " ++ (head (map IB.rawControllerName criticalInputs)) ++ ") > 0.5 then 1.0 else 0.0,\n" ++
-          "      --   " ++ OB.rawOutputName field2 ++ " = if (value " ++ (head (map IB.rawControllerName criticalInputs)) ++ ") > 0.5 then 1.0 else 0.0 \n" ++
-          "      -- }"
-        [field] ->
-          "      -- " ++ outputVar ++ "' = " ++ outputVar ++ " { " ++ OB.rawOutputName field ++ " = newValue }"
-        _ ->
-          "      -- " ++ outputVar ++ "' = " ++ outputVar ++ " { field1 = value1, field2 = value2 }"
-      
-      -- Generate sensor access examples
-      sensorExamples = case criticalInputs of
-        (input:_) -> 
-          "      -- \n" ++
-          "      -- Access input sensor data like:\n" ++
-          "      -- - " ++ IB.rawControllerName input ++ " sensor: (value " ++ IB.rawControllerName input ++ ") gives you the sensor reading\n" ++
-          "      -- - " ++ (if null criticalInputs then "turtlebot" else head (map IB.rawControllerName criticalInputs)) ++ " state: use existing parameter for feedback control"
-        _ -> 
-          "      -- \n" ++
-          "      -- Access input sensor data from the function parameters"
-   in fieldExamples ++ sensorExamples
-
 -- Generate decode statements for analyzer
 generateCriticalControllerDecodesAnalyzer :: [IB.RawControllerInputState] -> String
 generateCriticalControllerDecodesAnalyzer controllers =
@@ -277,35 +244,11 @@ generateInputVariablesAnalyzer controllers =
       inputVars = map IB.rawControllerName criticalControllers
    in intercalate " " inputVars
 
--- Generate transition logic comments
-generateTransitionLogicComments :: [IB.RawControllerInputState] -> String
-generateTransitionLogicComments inputControllers =
-  let criticalInputs = filter IB.rawCritical inputControllers
-      exampleCondition = case criticalInputs of
-        (input:_) -> 
-          "      -- shouldSwitch = (value " ++ IB.rawControllerName input ++ ") > 0.8  -- Switch when sensor reading is high\n" ++
-          "      -- targetState = if (value " ++ IB.rawControllerName input ++ ") > 0.8 then \"FastState\" \n" ++
-          "      --              else if (value " ++ IB.rawControllerName input ++ ") < 0.2 then \"SlowState\"\n" ++
-          "      --              else \"IdleState\"\n" ++
-          "      --\n" ++
-          "      -- Access input data:\n" ++
-          "      -- - (value " ++ IB.rawControllerName input ++ "): Get the sensor reading from " ++ IB.rawControllerName input ++ " controller"
-        _ -> 
-          "      -- shouldSwitch = someCondition  -- Define your switching condition\n" ++
-          "      -- targetState = \"TargetStateName\"  -- Define target state"
-      
-      additionalInputs = case drop 1 criticalInputs of
-        (input2:_) -> "\n      -- - " ++ IB.rawControllerName input2 ++ ": Access " ++ IB.rawControllerName input2 ++ " state for feedback-based decisions"
-        _ -> case criticalInputs of
-          (_:_) -> "\n      -- - turtlebot: Access previous turtlebot state for feedback-based decisions"
-          _ -> ""
-   in exampleCondition ++ additionalInputs
-
 -- Generate the ErrorState file using the errorstate template (only if it doesn't exist)
 writeErrorStateFile :: [String] -> [IB.RawControllerInputState] -> [OB.RawControllerOutputState] -> IO ()
 writeErrorStateFile controllerNames controllers outputControllers = do
   let stateName = "Error" :: String
-      moduleName = "Helpers.States.ErrorState" :: String
+      moduleName = "Error" :: String
       fileName = "FsmRunner/src/Helpers/States/errorState.hs" :: String
       controllerImports = generateControllerImports controllerNames
       criticalDecodes = generateCriticalControllerDecodes controllers
@@ -341,7 +284,7 @@ writeErrorStateFile controllerNames controllers outputControllers = do
 writeStateFile :: [String] -> [IB.RawControllerInputState] -> [OB.RawControllerOutputState] -> State -> IO ()
 writeStateFile controllerNames controllers outputControllers st = do
   let stateName = capitalize (name st)
-      moduleName = "Helpers.States." ++ stateName
+      moduleName = stateName
       fileName = "FsmRunner/src/Helpers/States/" ++ lowercaseFirst stateName ++ "State.hs"
       controllerImports = generateControllerImports controllerNames
       criticalDecodes = generateCriticalControllerDecodes controllers
@@ -355,10 +298,8 @@ writeStateFile controllerNames controllers outputControllers st = do
       outputType = generateOutputType outputControllers
       outputVariable = generateOutputVariable outputControllers
       defaultOutput = generateDefaultOutput outputControllers
-      controlLogicComments = generateControlLogicComments controllers outputControllers
       criticalDecodesAnalyzer = generateCriticalControllerDecodesAnalyzer controllers
       inputVariablesAnalyzer = generateInputVariablesAnalyzer controllers
-      transitionLogicComments = generateTransitionLogicComments controllers
       -- New SF template variables
       sfInputType = generateSFInputType controllers
       sfInputParameter = generateSFInputParameter controllers
@@ -478,10 +419,68 @@ manageStatesDirectory neededStateNames = do
   
   putStrLn $ "Managed States directory: kept " ++ show (length filesToKeep) ++ " files, removed " ++ show (length filesToDelete) ++ " unnecessary files"
 
+-- Generate the StateTemplate file using the templateState template (always overwrite to keep it up to date)
+writeStateTemplateFile :: [String] -> [IB.RawControllerInputState] -> [OB.RawControllerOutputState] -> IO ()
+writeStateTemplateFile controllerNames controllers outputControllers = do
+  let outDir = "FsmRunner/src/Helpers/States"
+      fileName = outDir </> "StateTemplate.hs"
+      controllerImports = generateControllerImports controllerNames
+      criticalDecodes = generateCriticalControllerDecodes controllers
+      defaultOutputTypes = generateDefaultOutputTypes outputControllers
+      outputDataFields = generateOutputDataFields outputControllers
+      inputErrorsDebugs = generateInputErrorsDebugs controllers
+      -- Original template variables  
+      inputTypes = generateInputTypes controllers
+      inputParameters = generateInputParameters controllers
+      inputVariables = generateInputVariables controllers
+      outputType = generateOutputType outputControllers
+      outputVariable = generateOutputVariable outputControllers
+      defaultOutput = generateDefaultOutput outputControllers
+      criticalDecodesAnalyzer = generateCriticalControllerDecodesAnalyzer controllers
+      inputVariablesAnalyzer = generateInputVariablesAnalyzer controllers
+      -- New SF template variables
+      sfInputType = generateSFInputType controllers
+      sfInputParameter = generateSFInputParameter controllers
+      sfInputVariable = generateSFInputVariable controllers
+      sfInputVariableAnalyzer = generateSFInputVariableAnalyzer controllers
+
+  eTemplate <- Mustache.automaticCompile ["./FsmBuilder/templates"] "templateState.mustache"
+  case eTemplate of
+    Left err -> putStrLn $ "Template parse error: " ++ show err
+    Right template -> do
+      let context =
+            Aeson.object
+              [ "import_controllers" Aeson..= controllerImports,
+                "decode_critical_controllers" Aeson..= criticalDecodes,
+                "default_outputtypes" Aeson..= defaultOutputTypes,
+                "outputdata" Aeson..= outputDataFields,
+                "input_errors_debugs" Aeson..= inputErrorsDebugs,
+                -- Original template variables (kept for compatibility)
+                "input_types" Aeson..= inputTypes,
+                "input_parameters" Aeson..= inputParameters,
+                "input_variables" Aeson..= inputVariables,
+                "output_type" Aeson..= outputType,
+                "output_variable" Aeson..= outputVariable,
+                "default_output" Aeson..= defaultOutput,
+                "decode_critical_controllers_analyzer" Aeson..= criticalDecodesAnalyzer,
+                "input_variables_analyzer" Aeson..= inputVariablesAnalyzer,
+                -- New SF template variables
+                "sf_input_type" Aeson..= sfInputType,
+                "sf_input_parameter" Aeson..= sfInputParameter,
+                "sf_input_variable" Aeson..= sfInputVariable,
+                "sf_input_variable_analyzer" Aeson..= sfInputVariableAnalyzer
+              ]
+          rendered = Mustache.substitute template context
+      -- replace HTML entities with real characters and write
+      let fixed = T.replace "&quot;" "\"" . T.replace "&gt;" ">" . T.replace "&#39;" "'" $ rendered
+      writeFile fileName (T.unpack fixed)
+      putStrLn $ "Wrote " ++ fileName
+
 main :: [String] -> [IB.RawControllerInputState] -> [OB.RawControllerOutputState] -> [State] -> IO ()
 main controllerNames controllers outputControllers states = do
   let stateNames = map name states
   manageStatesDirectory stateNames
+  writeStateTemplateFile controllerNames controllers outputControllers
   mapM_ (writeStateFile controllerNames controllers outputControllers) states
   writeErrorStateFile controllerNames controllers outputControllers
   writeControllogicFile controllerNames controllers outputControllers states
