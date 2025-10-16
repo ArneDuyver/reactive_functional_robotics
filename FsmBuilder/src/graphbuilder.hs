@@ -50,15 +50,16 @@ parseEnvFile content =
     mapMaybe f xs = [y | x <- xs, Just y <- [f x]]
 
 -- Extract MQTT configuration from .env file
-getMqttConfig :: FilePath -> IO (String, String)
+getMqttConfig :: FilePath -> IO (String, String, String)
 getMqttConfig envPath = do
   content <- readFile envPath
   let envVars = parseEnvFile content
       brokerHost = fromMaybe "ws://localhost" (lookup "MQTT_BROKER_HOST_JS" envVars)
       brokerPort = fromMaybe "9001" (lookup "MQTT_BROKER_PORT_JS" envVars)
       topicHighlight = fromMaybe "fsm/toenv" (lookup "TO_ENV_COLLECTION_TOPIC" envVars)
+      topicMessages = fromMaybe "fsm/toenv" (lookup "TO_ENV_COLLECTION_TOPIC" envVars)
       brokerUrl = brokerHost ++ ":" ++ brokerPort
-  return (brokerUrl, topicHighlight)
+  return (brokerUrl, topicHighlight, topicMessages)
 
 -- Generate the mermaid-mqtt.js file using the template
 generateMermaidMqttJs :: [State] -> IO ()
@@ -68,7 +69,7 @@ generateMermaidMqttJs states = do
       startState = generateStartState states
 
   -- Get MQTT configuration from .env file
-  (brokerUrl, topicHighlight) <- getMqttConfig "./config/.env"
+  (brokerUrl, topicHighlight, _) <- getMqttConfig "./config/.env"
 
   -- Load template and render
   eTemplate <- Mustache.automaticCompile ["./FsmBuilder/templates"] "mermaid-mqtt.mustache"
@@ -92,5 +93,32 @@ generateMermaidMqttJs states = do
       TIO.writeFile outFile fixed
       putStrLn $ "Wrote " ++ outFile ++ " with broker: " ++ brokerUrl ++ " and topic: " ++ topicHighlight
 
+-- Generate the fsm-messages.js file using the template
+generateFsmMessagesJs :: IO ()
+generateFsmMessagesJs = do
+  -- Get MQTT configuration from .env file
+  (brokerUrl, _, topicMessages) <- getMqttConfig "./config/.env"
+
+  -- Load template and render
+  eTemplate <- Mustache.automaticCompile ["./FsmBuilder/templates"] "fsm-messages.mustache"
+  case eTemplate of
+    Left err -> putStrLn $ "Template parse error: " ++ show err
+    Right template -> do
+      let context =
+            Aeson.object
+              [ "broker_url" Aeson..= brokerUrl,
+                "topic_messages" Aeson..= topicMessages
+              ]
+      let rendered = Mustache.substitute template context
+      let outDir = "FsmFrontend/static"
+      let outFile = outDir </> "fsm-messages.js"
+      createDirectoryIfMissing True outDir
+      -- Replace HTML entity &quot; with real double-quote and write
+      let fixed = T.replace "&quot;" "\"" rendered
+      TIO.writeFile outFile fixed
+      putStrLn $ "Wrote " ++ outFile ++ " with broker: " ++ brokerUrl ++ " and topic: " ++ topicMessages
+
 main :: [State] -> IO ()
-main states = generateMermaidMqttJs states
+main states = do
+  generateMermaidMqttJs states
+  generateFsmMessagesJs
