@@ -1,10 +1,9 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE CPP #-}
 module FsmFrontendLinux where
 
 import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core
-import System.Process (std_out, readProcess, readCreateProcess, shell, createProcess, StdStream(CreatePipe), waitForProcess, terminateProcess, ProcessHandle, getPid, getProcessExitCode, interruptProcessGroupOf)
+import System.Process (std_out, readProcess, readCreateProcess, shell, createProcess, StdStream(CreatePipe), waitForProcess, terminateProcess, ProcessHandle, getPid, getProcessExitCode)
 import System.IO (hSetBuffering, BufferMode(LineBuffering), hIsEOF, hGetLine, Handle, hClose)
 import Control.Monad (void, when, forM_)
 import Data.IORef
@@ -14,10 +13,6 @@ import Control.Exception (catch, SomeException)
 import System.FilePath (takeDirectory, (</>), takeBaseName, takeExtension)
 import System.Directory (doesFileExist, removeFile, listDirectory, createDirectoryIfMissing, removeDirectoryRecursive, copyFile, doesDirectoryExist)
 import Data.List (isSuffixOf)
-
-#ifndef mingw32_HOST_OS
-import System.Posix.Signals (signalProcess, sigTERM, sigKILL)
-#endif
 
 
 -- outputRef: Stores accumulated output lines from running processes
@@ -129,14 +124,14 @@ setup collectOutputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThr
     on UI.click collectButton $ \_ -> do
         setButtonActive collectButton
         updateCollectDisplay "Starting messageCollector..."
-        liftIO $ runProcessWithLiveOutput collectOutputRef mcPhRef mcThreadRef mcHandleRef window "cabal run messageCollector" 
+        liftIO $ runProcessWithLiveOutput collectOutputRef mcPhRef mcThreadRef mcHandleRef window "cabal run exe:messagecollector" 
             (\lines -> void $ runUI window (updateCollectDisplayHtml (unlines (map (\l -> "<div>" ++ l ++ "</div>") lines))))
         return ()
 
     on UI.click runButton $ \_ -> do
         setButtonActive runButton
         updateRunDisplay "Starting FsmRunner..."
-        liftIO $ runProcessWithLiveOutput runnerOutputRef runnerPhRef runnerThreadRef runnerhandleRef window "cabal run FsmRunner" 
+        liftIO $ runProcessWithLiveOutput runnerOutputRef runnerPhRef runnerThreadRef runnerhandleRef window "cabal run exe:fsmrunner" 
             (\lines -> void $ runUI window (updateRunDisplayHtml (unlines (map (\l -> "<div>" ++ l ++ "</div>") lines))))
         return ()
 
