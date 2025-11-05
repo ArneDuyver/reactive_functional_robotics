@@ -90,4 +90,17 @@ controllers:
             name: width
             type: Double
             default: -1
+    
+  - controller:
+      name: controller
+      critical: true
+      inputs:
+        - yJoystick:
+            name: yJoystick
+            type: Double
+            default: -1
+        - xJoystick:
+            name: xJoystick
+            type: Double
+            default: -1
 

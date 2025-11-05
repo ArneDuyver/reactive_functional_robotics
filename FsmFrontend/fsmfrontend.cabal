@@ -14,11 +14,14 @@ common warnings
 library
     import:           warnings
     exposed-modules:  FsmFrontend
+                    , FsmFrontendLinux
     build-depends:    base >=4.17.2.1 && <4.20
                     , process
                     , threepenny-gui
                     , filepath
                     , directory
+    if !os(windows)
+      build-depends:  unix
     hs-source-dirs:   src
     default-language: Haskell2010
 

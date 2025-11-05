@@ -155,8 +155,8 @@ createMqttConfigFromFile filepath = do
 
 startMqttListener :: MqttConfig -> String -> MVar () -> IO (TBQueue String, ThreadId)
 startMqttListener mqttConfig topic stopSignal = do
-  -- Increased queue size to 50 to handle message bursts better when draining
-  eventChan <- newTBQueueIO 50
+  -- Small queue size of 2 - allows latest message plus one buffer, older messages are dropped
+  eventChan <- newTBQueueIO 2
   tid <- forkIO $ do
     let brokerUri = host mqttConfig ++ ":" ++ show (port mqttConfig)
     (session, mc) <- subToTopic brokerUri topic eventChan
@@ -218,7 +218,7 @@ mqttCollector = do
                   return ()
                 else do
                   -- Use getLatestMsg to drain queues and get only the latest messages
-                  -- This skips intermediate messages to keep up with 20ms pace
+                  -- Reduced to 10ms for maximum responsiveness to controller input
                   msgs <- mapM (atomically . getLatestMsgMaybe) chans
                   let newLasts = zipWith (flip fromMaybe) msgs lasts
                       combinedMsg = combineJsons newLasts
@@ -226,7 +226,7 @@ mqttCollector = do
                   if any (\msg -> "QUIT" `isPrefixOf` msg) newLasts
                     then return ()
                     else do
-                      threadDelay 20000 -- Microseconds (20ms to match input pace)
+                      threadDelay 10000 -- Microseconds (10ms for faster response)
                       loop newLasts
 
         let waitForRequiredDevices lasts = do

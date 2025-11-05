@@ -7,6 +7,7 @@ import FRP.Yampa
 import Helpers.YampaHelper
 import Helpers.Controllers.Turtlebot
 import Helpers.Controllers.Target
+import Helpers.Controllers.Controller
 import Helpers.Controllers.OutputState
 
 
@@ -15,6 +16,7 @@ errorStateSF :: SF String OutputState
 errorStateSF = proc inputStr -> do
   let (turtlebot, turtlebotErrFlag, turtlebotDebugMsg) = decodeTurtlebotState inputStr
   let (target, targetErrFlag, targetDebugMsg) = decodeTargetState inputStr
+  let (controller, controllerErrFlag, controllerDebugMsg) = decodeControllerState inputStr
 
   -- Create default types for Output using default constructors
   let turtlebotOut = defaultTurtlebot

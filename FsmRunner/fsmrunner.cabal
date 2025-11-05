@@ -19,11 +19,9 @@ executable fsmrunner
                     , Helpers.YampaHelper
                     , Helpers.Controllers.OutputState
                     , Helpers.Controllers.Turtlebot
-                    , Helpers.Controllers.Target                    , Helpers.States.MoveForwardState
+                    , Helpers.Controllers.Target
+                    , Helpers.Controllers.Controller                    , Helpers.States.ControllerState
                     , Helpers.States.EndState
-                    , Helpers.States.TurnRightState
-                    , Helpers.States.TurnLeftState
-                    , Helpers.States.RealignState
                     , Helpers.States.ErrorState
                     
     build-depends:    base >=4.17.2.1 && <4.20
