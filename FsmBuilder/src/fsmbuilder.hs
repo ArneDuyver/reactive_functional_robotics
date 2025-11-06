@@ -249,7 +249,7 @@ writeErrorStateFile :: [String] -> [IB.RawControllerInputState] -> [OB.RawContro
 writeErrorStateFile controllerNames controllers outputControllers = do
   let stateName = "Error" :: String
       moduleName = "Error" :: String
-      fileName = "FsmRunner/src/Helpers/States/errorState.hs" :: String
+      fileName = "FsmRunner/src/Helpers/States/ErrorState.hs" :: String
       controllerImports = generateControllerImports controllerNames
       criticalDecodes = generateCriticalControllerDecodes controllers
       defaultOutputTypes = generateDefaultOutputTypes outputControllers
@@ -285,7 +285,7 @@ writeStateFile :: [String] -> [IB.RawControllerInputState] -> [OB.RawControllerO
 writeStateFile controllerNames controllers outputControllers st = do
   let stateName = capitalize (name st)
       moduleName = stateName
-      fileName = "FsmRunner/src/Helpers/States/" ++ lowercaseFirst stateName ++ "State.hs"
+      fileName = "FsmRunner/src/Helpers/States/" ++ stateName ++ "State.hs"
       controllerImports = generateControllerImports controllerNames
       criticalDecodes = generateCriticalControllerDecodes controllers
       defaultOutputTypes = generateDefaultOutputTypes outputControllers
@@ -375,8 +375,8 @@ writeControllogicFile controllerNames controllers outputControllers states = do
                 "startStateLower" Aeson..= startStateLower
               ]
           rendered = Mustache.substitute template context
-      writeFile "FsmRunner/src/controllogic.hs" (T.unpack rendered)
-      putStrLn "Wrote FsmRunner/src/controllogic.hs"
+      writeFile "FsmRunner/src/Controllogic.hs" (T.unpack rendered)
+      putStrLn "Wrote FsmRunner/src/Controllogic.hs"
 
 -- Generate diagramData JS code for Mermaid from a list of State
 createDiagramDataJS :: [State] -> String
@@ -408,7 +408,7 @@ manageStatesDirectory neededStateNames = do
     return isFile) allItems
   
   -- Generate expected filenames for needed states (including ErrorState)
-  let expectedFiles = map (\name -> lowercaseFirst (capitalize name) ++ "State.hs") neededStateNames ++ ["errorState.hs"]
+  let expectedFiles = map (\name -> capitalize name ++ "State.hs") neededStateNames ++ ["ErrorState.hs"]
   
   -- Files to keep: expected files and .bk files
   let filesToKeep = filter (\f -> f `elem` expectedFiles || takeExtension f == ".bk") files
