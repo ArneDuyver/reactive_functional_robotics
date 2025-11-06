@@ -21,9 +21,6 @@ executable fsmrunner
                     , Helpers.Controllers.Turtlebot
                     , Helpers.Controllers.Target                    , Helpers.States.MoveForwardState
                     , Helpers.States.EndState
-                    , Helpers.States.TurnRightState
-                    , Helpers.States.TurnLeftState
-                    , Helpers.States.RealignState
                     , Helpers.States.ErrorState
                     
     build-depends:    base >=4.17.2.1 && <4.20
@@ -37,7 +34,7 @@ executable fsmrunner
                     , time
                     , split
                     , aeson
-                    , Yampa >= 0.14 && < 0.15
+                    , Yampa
                     , rfrlibrary
     hs-source-dirs:   src
     default-language: Haskell2010
