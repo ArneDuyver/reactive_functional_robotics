@@ -149,7 +149,7 @@ setup collectOutputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThr
         pythonPath <- case pythonPathInput of
             Just input -> get value input
             Nothing -> return "../complete.py"
-        let command = "python3 \"" ++ pythonPath ++ "\""
+        let command = "echo molrfr | sudo -S python3 \"" ++ pythonPath ++ "\""
         liftIO $ runProcessWithLiveOutput simOutputRef simPhRef simThreadRef simHandleRef window command
             (\lines -> void $ runUI window (updateSimulationDisplayHtml (unlines (map (\l -> "<div>" ++ l ++ "</div>") lines))))
         return ()
