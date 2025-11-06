@@ -19,28 +19,21 @@ analyzerMoveForwardState :: SF (String, OutputState) (Event String)
 analyzerMoveForwardState = genericAnalyzerSF stateTransition
 
 
+-- Specific behaviour for MoveForward
 stateBehaviour :: SF (TurtlebotState, TargetState) (Turtlebot, String)
 stateBehaviour = proc (turtlebot, target) -> do
-  let turtlebotOut = Turtlebot {
-                        motorLeft = fst (translationalAndRotationalVelocitiesToWheelVelocities 0.3 0.0),
-                        motorRight = snd (translationalAndRotationalVelocitiesToWheelVelocities 0.3 0.0)
-                    }
-      debugString = "STATE: moveForward :: "
+  -- Create default types for Output
+  let turtlebotOut = defaultTurtlebot
+      debugString = "STATE: moveForward :: "  -- Customize this debug message
+      -- Add your control logic here using the input parameters
   returnA -< (turtlebotOut, debugString)
 
+-- Specific transition for MoveForward
 stateTransition :: SF (TurtlebotState, TargetState) (Bool, String)
 stateTransition = proc (turtlebot, target) -> do
-  let reachedTarget = distanceBetweenPoints (xCoor turtlebot, yCoor turtlebot) (xCoorTarget target, yCoorTarget target) < width target
-  let reachedWall = sensorFrontOne turtlebot > 0 && sensorFrontOne turtlebot < 0.35
-  let opening = if (sensorFrontRightDetect turtlebot == 0) then "right" 
-                else if (sensorFrontLeftDetect turtlebot == 0) then "left"
-                else "back"
-  let shouldSwitch = reachedTarget || reachedWall
-  let targetState
-        | reachedTarget = "endState"
-        | reachedWall = if opening == "right" then "turnRightState"
-                        else if opening == "left" then "turnLeftState"
-                        else "errorState"
-        | otherwise = "errorState"
-
+  -- Add your transition logic here using the input parameters:
+  -- Return (shouldSwitch, targetStateName)
+  let shouldSwitch = False  -- Change this condition based on your logic
+      targetState = "newStateName"  -- Target state name
+      -- Add your transition logic here based on the input parameters
   returnA -< (shouldSwitch, targetState)
