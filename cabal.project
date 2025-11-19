@@ -1,7 +1,1 @@
 packages:  MessageCollector, FsmBuilder, FsmFrontend, FsmRunner, RfrLibrary
-
-with-compiler: ghc-9.6.7
-
-program-locations
-  ar-location: C:/ghcup/ghc/9.6.7/mingw/bin/ar.exe
-  ld-location: C:/ghcup/ghc/9.6.7/mingw/bin/ld.exe

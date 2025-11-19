@@ -149,7 +149,7 @@ setup collectOutputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThr
         pythonPath <- case pythonPathInput of
             Just input -> get value input
             Nothing -> return "../complete.py"
-        let command = "echo molrfr | sudo -S python3 \"" ++ pythonPath ++ "\""
+        let command = "sudo -n ./config/root-scripts/process-helper.sh start-simulation \"" ++ pythonPath ++ "\""
         liftIO $ runProcessWithLiveOutput simOutputRef simPhRef simThreadRef simHandleRef window command
             (\lines -> void $ runUI window (updateSimulationDisplayHtml (unlines (map (\l -> "<div>" ++ l ++ "</div>") lines))))
         return ()
@@ -244,7 +244,9 @@ setup collectOutputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThr
                       Just pid -> do
                         putStrLn $ "FsmRunner still running after graceful shutdown attempt, using kill -9 on PID: " ++ show pid
                         catch (do
-                          _ <- readProcess "kill" ["-9", show pid] ""
+                          _ <- readProcess "sudo"
+                               ["-n", "./config/root-scripts/process-helper.sh", "kill-fsmrunner", show pid]
+                               ""
                           putStrLn "Force termination with kill -9 completed"
                           return ())
                           (\e -> do
@@ -273,16 +275,34 @@ setup collectOutputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThr
             case mcph of
               Just ph -> do
                 -- Create stop signal file for graceful shutdown
-                catch (writeFile "messageCollector.stop" "") (\(_ :: SomeException) -> return ())
-                putStrLn "Created messageCollector stop signal, waiting for graceful shutdown..."
+                catch (do
+                  writeFile "messageCollector.stop" ""
+                  putStrLn "Created messageCollector stop signal, waiting for graceful shutdown..."
+                  return ())
+                  (\e -> putStrLn $ "Failed to create messageCollector stop signal: " ++ show (e :: SomeException))
                 -- Wait a bit for graceful shutdown
                 threadDelay 2000000 -- 2 seconds
-                -- Check if still running, then force terminate
+                -- Check if still running, then force terminate with kill
                 mExitCode <- getProcessExitCode ph
                 case mExitCode of
-                  Nothing -> do
-                    terminateProcess ph
-                    putStrLn "Force terminated messageCollector process"
+                  Nothing -> do -- Still running, force terminate with kill -9
+                    mpid <- getPid ph
+                    case mpid of
+                      Just pid -> do
+                        putStrLn $ "MessageCollector still running after graceful shutdown attempt, using kill -9 on PID: " ++ show pid
+                        catch (do
+                          _ <- readProcess "sudo"
+                               ["-n", "./config/root-scripts/process-helper.sh", "kill-messagecollector", show pid]
+                               ""
+                          putStrLn "Force termination with kill -9 completed"
+                          return ())
+                          (\e -> do
+                            putStrLn $ "kill failed: " ++ show (e :: SomeException)
+                            putStrLn "Falling back to terminateProcess"
+                            terminateProcess ph)
+                      Nothing -> do
+                        putStrLn "Could not get process ID, using terminateProcess"
+                        terminateProcess ph
                   Just _ -> putStrLn "MessageCollector stopped gracefully"
                 -- Clean up stop signal file
                 catch (removeFile "messageCollector.stop") (\(_ :: SomeException) -> return ())
@@ -330,7 +350,9 @@ setup collectOutputRef runnerPhRef runnerThreadRef runnerhandleRef mcPhRef mcThr
                       Just pid -> do
                         putStrLn $ "Process still running after graceful shutdown attempt, using kill -9 on PID: " ++ show pid
                         catch (do
-                          _ <- readProcess "kill" ["-9", show pid] ""
+                          _ <- readProcess "sudo"
+                               ["-n", "./config/root-scripts/process-helper.sh", "kill-simulation", show pid]
+                               ""
                           putStrLn "Force termination with kill -9 completed"
                           return ())
                           (\e -> do
